@@ -4,6 +4,7 @@ import BasicMesh from '../components/BasicMesh'
 import { LevaWrapper } from "@packages/r3f-gist/components";
 import { Canvas } from "@react-three/fiber";
 import { AdaptiveDPRMonitor } from "@packages/r3f-gist/components/webgl";
+import Grass from "../components/Grass";
 
 export default function App() {
     return <>
@@ -25,6 +26,7 @@ export default function App() {
 
             <CameraControls makeDefault />
             <BasicMesh />
+            <Grass />
             <CanvasCapture />
         </Canvas>
     </>
