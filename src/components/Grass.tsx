@@ -23,10 +23,51 @@ const grassVertex = /* glsl */ `
 
   varying float vHeight;
   varying vec2 vUv;
+  varying float vType;
 
-  // 簡單 hash 當成亂數
-  float hash(vec2 p) {
-    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+  // Hash functions for per-blade variation
+  float hash11(float x) {
+    return fract(sin(x * 37.0) * 43758.5453123);
+  }
+
+  vec2 hash21(vec2 p) {
+    float h1 = hash11(dot(p, vec2(127.1, 311.7)));
+    float h2 = hash11(dot(p, vec2(269.5, 183.3)));
+    return vec2(h1, h2);
+  }
+
+  // Grass parameters struct
+  struct GrassParams {
+    float height;
+    float width;
+    float bend;
+    float tipThin;
+    float type;
+  };
+
+  // Generate per-blade parameters from seed
+  GrassParams getParams(vec2 seed) {
+    vec2 h1 = hash21(seed * 13.0);
+    vec2 h2 = hash21(seed * 29.0);
+
+    GrassParams gp;
+
+    // Height variation: 0.6~1.1x base height
+    gp.height = bladeHeight * mix(0.6, 1.1, h1.x);
+
+    // Width variation: 0.7~1.3x base width
+    gp.width = bladeWidth * mix(0.7, 1.3, h1.y);
+
+    // Bend variation: some almost straight, some very bent
+    gp.bend = bendAmount * mix(0.3, 1.2, h2.x);
+
+    // Tip thinness: how much the tip tapers
+    gp.tipThin = mix(1.0, 2.5, h2.y);
+
+    // Grass type: 0,1,2 for different varieties (future use)
+    gp.type = floor(h1.x * 3.0);
+
+    return gp;
   }
 
   vec3 bezier2(vec3 p0, vec3 p1, vec3 p2, float t) {
@@ -42,12 +83,34 @@ const grassVertex = /* glsl */ `
     float t = uv.y;
     float s = (uv.x - 0.5) * 2.0; // -1 to 1
 
+    // Get per-blade parameters from seed
+    vec2 seed = instanceOffset.xz;
+    GrassParams gp = getParams(seed);
+
+    // Use per-blade parameters instead of uniforms
+    float height = gp.height;
+    float width = gp.width;
+    float bend = gp.bend;
+
+    // Bezier control points using per-blade height and bend
     vec3 p0 = vec3(0.0, 0.0, 0.0);
-    vec3 p2 = vec3(0.0, bladeHeight, 0.0);
-    vec3 p1 = vec3(0.0, bladeHeight * 0.5, bendAmount);
+    vec3 p2 = vec3(0.0, height, 0.0);
     
-    vec3 spine  = bezier2(p0, p1, p2, t);
-    vec3 tangent = normalize( bezier2Tangent(p0, p1, p2, t));
+    // Different grass types have different bend characteristics
+    vec3 p1;
+    if (gp.type < 0.5) {
+      // Type 0: Straight and sharp, bend in upper-middle section
+      p1 = vec3(0.0, height * 0.6, bend * 0.7);
+    } else if (gp.type < 1.5) {
+      // Type 1: Bend in lower-middle section
+      p1 = vec3(0.0, height * 0.3, bend * 1.2);
+    } else {
+      // Type 2: Bend near the top
+      p1 = vec3(0.0, height * 0.8, bend * 1.0);
+    }
+    
+    vec3 spine = bezier2(p0, p1, p2, t);
+    vec3 tangent = normalize(bezier2Tangent(p0, p1, p2, t));
 
     vec3 ref = vec3(1.0, 0.0, 0.0);
 
@@ -56,14 +119,14 @@ const grassVertex = /* glsl */ `
     }
 
     vec3 normal = normalize(cross(tangent, ref));
-    vec3 side   = normalize(cross(normal, tangent));
+    vec3 side = normalize(cross(normal, tangent));
     
-    float widthFactor = (1.0 - t);
-    vec3 lpos = spine + side * bladeWidth * widthFactor * s;
+    // Width profile with tipThin variation
+    float widthFactor = pow(1.0 - t, gp.tipThin);
+    vec3 lpos = spine + side * width * widthFactor * s;
     
-    
-    vec2 seed = instanceOffset.xz;
-    float perBladeHash = hash(seed * 37.0);
+    // Random rotation per blade
+    float perBladeHash = hash11(dot(seed, vec2(37.0, 17.0)));
     float randomAngle = perBladeHash * 6.2831;
 
     lpos.xz = rotate2D(lpos.xz, randomAngle);
@@ -74,6 +137,7 @@ const grassVertex = /* glsl */ `
 
     vUv = uv;
     vHeight = t;
+    vType = gp.type;
   }
 `;
 
