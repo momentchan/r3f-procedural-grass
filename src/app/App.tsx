@@ -1,6 +1,5 @@
 import { AdaptiveDpr, CameraControls, Environment, useHelper } from "@react-three/drei";
 import { CanvasCapture } from "@packages/r3f-gist/components/utility";
-import BasicMesh from '../components/BasicMesh'
 import { LevaWrapper } from "@packages/r3f-gist/components";
 import { Canvas, useFrame } from "@react-three/fiber";
 import Grass from "../components/Grass";
@@ -8,6 +7,7 @@ import { useRef, useMemo } from "react";
 import { useControls } from "leva";
 import * as THREE from 'three'
 import { CustomShaderMaterial } from "@packages/r3f-gist/shaders/materials/CustomShaderMaterial";
+import Effects from "../components/Effects";
 
 function DirectionalLightHelper() {
     const directionalLightRef = useRef<THREE.DirectionalLight>(null)
@@ -78,7 +78,7 @@ export default function App() {
             camera={{
                 fov: 45,
                 near: 0.1,
-                far: 200,
+                far: 50,
                 position: [0, 0, 5]
             }}
             gl={{ preserveDrawingBuffer: true }}
@@ -95,6 +95,7 @@ export default function App() {
             <Grass />
             {/* <NormalSphere /> */}
             <CanvasCapture />
+            <Effects />
 
         </Canvas>
     </>
