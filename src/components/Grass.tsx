@@ -6,7 +6,7 @@ import utility from '@packages/r3f-gist/shaders/cginc/math/utility.glsl'
 
 const GRID_SIZE = 64;
 const GRASS_BLADES = GRID_SIZE * GRID_SIZE;
-const PATCH_SIZE = 4;
+const PATCH_SIZE = 8;
 const BLADE_HEIGHT = 0.6;
 const BLADE_WIDTH = 0.02;
 const BLADE_SEGMENTS = 14;
@@ -29,6 +29,7 @@ const grassVertex = /* glsl */ `
   varying float vPresence;
   varying float vClumpRandom;
 
+  varying vec3 vNormal;
   // Hash functions for per-blade variation
   float hash11(float x) {
     return fract(sin(x * 37.0) * 43758.5453123);
@@ -96,6 +97,7 @@ const grassVertex = /* glsl */ `
     float bend;
     float tipThin;
     float type;
+    float baseWidth;
   };
 
   // Generate clump-level parameters (per cell)
@@ -132,7 +134,39 @@ const grassVertex = /* glsl */ `
     // Use clump type (same type within clump)
     gp.type = clumpParams.w;
 
+    // Base width for width profile calculation
+    gp.baseWidth = mix(0.2, 0.5, h1.x);
+
     return gp;
+  }
+
+  // Ghost-style Lighting Normal
+  // Computes a lighting normal that blends geometric normal with clump normal
+  // for stable, clump-aware lighting that reduces specular noise
+  vec3 computeLightingNormal(
+    vec3 geoNormal,
+    vec2 toCenter,
+    float t,
+    vec3 worldPos
+  ) {
+    // Step 1: Clump normal (2.5D, represents clump volume)
+    vec3 clumpNormal = normalize(vec3(toCenter.x, 0.7, toCenter.y));
+    
+    // Step 2: Height weight (base closer to clump normal)
+    float heightMask = pow(1.0 - t, 0.7);
+    
+    // Step 3: Distance weight (farther = more fake normal)
+    float dist = length(cameraPosition - worldPos);
+    float distMask = smoothstep(4.0, 12.0, dist);
+    
+    // Step 4: Combine lighting normal
+    return normalize(
+      mix(
+        geoNormal,
+        clumpNormal,
+        heightMask * distMask
+      )
+    );
   }
 
   vec3 bezier2(vec3 p0, vec3 p1, vec3 p2, float t) {
@@ -219,7 +253,7 @@ const grassVertex = /* glsl */ `
     vec3 side = normalize(cross(normal, tangent));
     
     // Width profile with tipThin variation
-    float widthFactor = pow(1.0 - t, gp.tipThin);
+    float widthFactor = (t + gp.baseWidth) * pow(1.0 - t, gp.tipThin);
     vec3 lpos = spine + side * width * widthFactor * s;
     
     // Clump-based rotation: grass blades oriented toward/away from clump center
@@ -238,12 +272,19 @@ const grassVertex = /* glsl */ `
     
     vec3 worldPos = lpos + instanceOffset;
     
+    
+    // ---- Ghost-style Lighting Normal ----
+    // Geometric normal (already calculated as: normalize(cross(tangent, ref)))
+    vec3 lightingNormal = computeLightingNormal(normal, toCenter, t, worldPos);
+    // ---- Lighting Normal end ----
+    
     gl_Position = projectionMatrix * modelViewMatrix * vec4(worldPos, 1.0);
 
     vUv = uv;
     vHeight = t;
     vType = gp.type;
     vPresence = presence;
+    vNormal = lightingNormal;
     vClumpRandom = clumpRandom;
   }
 `;
@@ -255,6 +296,7 @@ const grassFragment = /* glsl */ `
   varying float vPresence;
   varying float vClumpRandom;
 
+  varying vec3 vNormal;
   void main() {
     // 1. Height gradient
     vec3 baseColor = vec3(0.18, 0.35, 0.12);
@@ -353,6 +395,7 @@ export default function Grass() {
         <instancedMesh
             args={[geometry, undefined as any, GRASS_BLADES]}
             geometry={geometry}
+            key={Math.random()}
         >
             <shaderMaterial
                 fragmentShader={grassFragment}
