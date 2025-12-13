@@ -2,6 +2,7 @@ import { useMemo, useEffect, useRef } from 'react';
 import * as THREE from 'three'
 import { useControls } from 'leva'
 import CustomShaderMaterial from 'three-custom-shader-material'
+import CustomShaderMaterialVanilla from 'three-custom-shader-material/vanilla'
 import utility from '@packages/r3f-gist/shaders/cginc/math/utility.glsl'
 
 // ============================================================================
@@ -435,7 +436,7 @@ export default function Grass() {
 
     const materialControls = useControls('Material', {
         roughness: { value: 0.3, min: 0.0, max: 1.0, step: 0.01 },
-        metalness: { value: 0.0, min: 0.0, max: 1.0, step: 0.01 },
+        metalness: { value: 0.5, min: 0.0, max: 1.0, step: 0.01 },
         emissive: { value: '#000000', label: 'Emissive Color' },
         emissiveIntensity: { value: 0.0, min: 0.0, max: 2.0, step: 0.1 },
         envMapIntensity: { value: 1.0, min: 0.0, max: 3.0, step: 0.1 },
@@ -454,6 +455,23 @@ export default function Grass() {
         tipColor: { value: new THREE.Vector3(0.35, 0.65, 0.28) },
     }).current
 
+    // Create depth material for directional/spot light shadows
+    const depthMat = useMemo(() => {
+        // Replace csm_Position with transformed for shadow pass
+
+        const m = new CustomShaderMaterialVanilla({
+            baseMaterial: THREE.MeshDepthMaterial,
+            vertexShader: grassVertex,
+            uniforms: uniforms,
+            depthPacking: THREE.RGBADepthPacking,
+        })
+
+        // Important: depthMat doesn't need DoubleSide unless you really want double-sided shadows
+        // m.side = THREE.DoubleSide;
+
+        return m
+    }, [uniforms])
+
     useEffect(() => {
         uniforms.bladeHeight.value = bladeHeight
         uniforms.bladeWidth.value = bladeWidth
@@ -468,13 +486,19 @@ export default function Grass() {
         
         const tipColorVec = new THREE.Color(tipColor as any)
         uniforms.tipColor.value.set(tipColorVec.r, tipColorVec.g, tipColorVec.b)
-    }, [bladeHeight, bladeWidth, bendAmount, clumpSize, clumpRadius, thicknessStrength, baseColor, tipColor])
+        
+        // Trigger shadow material to recompile when uniforms change
+        depthMat.needsUpdate = true
+    }, [bladeHeight, bladeWidth, bendAmount, clumpSize, clumpRadius, thicknessStrength, baseColor, tipColor, depthMat])
 
 
     return (
         <instancedMesh
             args={[geometry, undefined as any, GRASS_BLADES]}
             geometry={geometry}
+            // castShadow
+            // receiveShadow
+            customDepthMaterial={depthMat}
         >
             <CustomShaderMaterial
                 ref={materialRef}

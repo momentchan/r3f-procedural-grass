@@ -12,10 +12,10 @@ export default function Effects() {
 
     const dofParams = useControls('Effects.Depth of Field', {
         enabled: { value: false, label: 'Enable Depth of Field' },
-        focusDistance: { value: 0.1, min: 0, max: 1, step: 0.01 },
+        focusDistance: { value: 2.5, min: 0, max: 10, step: 0.01 },
         focalLength: { value: 0.024, min: 0.001, max: 1, step: 0.001 },
-        bokehScale: { value: 2, min: 0, max: 10, step: 0.1 },
-        focusRange: { value: 0.15, min: 0.01, max: 1, step: 0.01 },
+        bokehScale: { value: 5, min: 0, max: 10, step: 0.1 },
+        focusRange: { value: 1.5, min: 0.01, max: 10, step: 0.01 },
         blur: { value: 0.5, min: 0, max: 2, step: 0.01 }
     }, { collapsed: true });
 
@@ -116,7 +116,7 @@ export default function Effects() {
     return (
         <EffectComposer
             ref={composer}
-            // multisampling={0}
+            multisampling={0}
             resolutionScale={1}
             frameBufferType={THREE.HalfFloatType}
             enableNormalPass={false}

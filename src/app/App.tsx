@@ -3,7 +3,7 @@ import { CanvasCapture } from "@packages/r3f-gist/components/utility";
 import { LevaWrapper } from "@packages/r3f-gist/components";
 import { Canvas, useFrame } from "@react-three/fiber";
 import Grass from "../components/Grass";
-import { useRef, useMemo } from "react";
+import { useRef, useMemo, useEffect } from "react";
 import { useControls } from "leva";
 import * as THREE from 'three'
 import { CustomShaderMaterial } from "@packages/r3f-gist/shaders/materials/CustomShaderMaterial";
@@ -13,12 +13,43 @@ function DirectionalLightHelper() {
     const directionalLightRef = useRef<THREE.DirectionalLight>(null)
     useHelper(directionalLightRef as React.MutableRefObject<THREE.Object3D>, THREE.DirectionalLightHelper, 1, 'red')
     
-    const { rotationSpeed } = useControls('Directional Light', {
-        rotationSpeed: { value: 0.5, min: 0, max: 2, step: 0.1 }
+    const { rotationSpeed, shadowMapSize, shadowCameraSize } = useControls('Directional Light', {
+        rotationSpeed: { value: 0.5, min: 0, max: 2, step: 0.1 },
+        shadowMapSize: { value: 2048, min: 512, max: 4096, step: 512 },
+        shadowCameraSize: { value: 10, min: 5, max: 20, step: 1 }
     })
     
     const basePosition = useMemo(() => new THREE.Vector3(0, 2, 5), [])
     const position = useMemo(() => new THREE.Vector3(), [])
+    
+    // Configure shadow quality settings
+    useEffect(() => {
+        if (!directionalLightRef.current) return
+        
+        const light = directionalLightRef.current
+        const shadow = light.shadow
+        
+        // Increase shadow map resolution
+        shadow.mapSize.width = shadowMapSize
+        shadow.mapSize.height = shadowMapSize
+        
+        // Configure shadow camera bounds for better coverage
+        const camera = shadow.camera as THREE.OrthographicCamera
+        camera.left = -shadowCameraSize
+        camera.right = shadowCameraSize
+        camera.top = shadowCameraSize
+        camera.bottom = -shadowCameraSize
+        camera.near = 0.1
+        camera.far = 50
+        
+        // Reduce shadow artifacts
+        shadow.bias = -0.0001
+        shadow.normalBias = 0.02
+        
+        // Update shadow camera
+        camera.updateProjectionMatrix()
+        shadow.needsUpdate = true
+    }, [shadowMapSize, shadowCameraSize])
     
     useFrame((state) => {
         if (!directionalLightRef.current) return
@@ -78,7 +109,7 @@ export default function App() {
             camera={{
                 fov: 45,
                 near: 0.1,
-                far: 50,
+                far: 20,
                 position: [0, 0, 5]
             }}
             gl={{ preserveDrawingBuffer: true }}
@@ -96,6 +127,10 @@ export default function App() {
             {/* <NormalSphere /> */}
             <CanvasCapture />
             <Effects />
+            <mesh receiveShadow rotation-x={-Math.PI / 2}>
+                <planeGeometry args={[10, 10]}  />
+                <meshStandardMaterial color="white"/>
+            </mesh>
 
         </Canvas>
     </>
