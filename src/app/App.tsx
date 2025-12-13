@@ -1,4 +1,4 @@
-import { AdaptiveDpr, CameraControls, useHelper } from "@react-three/drei";
+import { AdaptiveDpr, CameraControls, Environment, useHelper } from "@react-three/drei";
 import { CanvasCapture } from "@packages/r3f-gist/components/utility";
 import BasicMesh from '../components/BasicMesh'
 import { LevaWrapper } from "@packages/r3f-gist/components";
@@ -14,7 +14,7 @@ function DirectionalLightHelper() {
     useHelper(directionalLightRef as React.MutableRefObject<THREE.Object3D>, THREE.DirectionalLightHelper, 1, 'red')
     
     const { rotationSpeed } = useControls('Directional Light', {
-        rotationSpeed: { value: 0., min: 0, max: 2, step: 0.1 }
+        rotationSpeed: { value: 0.5, min: 0, max: 2, step: 0.1 }
     })
     
     const basePosition = useMemo(() => new THREE.Vector3(0, 2, 5), [])
@@ -31,7 +31,7 @@ function DirectionalLightHelper() {
     })
     
     return (
-        <directionalLight ref={directionalLightRef} castShadow position={basePosition.toArray()} intensity={1} />
+        <directionalLight ref={directionalLightRef} castShadow position={basePosition.toArray()} intensity={1.0} />
     )
 }
 
@@ -81,19 +81,21 @@ export default function App() {
                 far: 200,
                 position: [0, 0, 5]
             }}
-            gl={{ preserveDrawingBuffer: true, toneMapping: THREE.NoToneMapping  }}
+            gl={{ preserveDrawingBuffer: true }}
             dpr={[1, 2]}
             performance={{ min: 0.5, max: 1 }}
         >
-            <color attach="background" args={['#ffffff']} />
+            <color attach="background" args={['#000000']} />
             <AdaptiveDpr pixelated />
 
             <CameraControls makeDefault />
+            <Environment preset="city" environmentIntensity={0.2} />
             <DirectionalLightHelper />
             {/* <BasicMesh /> */}
             <Grass />
             {/* <NormalSphere /> */}
             <CanvasCapture />
+
         </Canvas>
     </>
 }
