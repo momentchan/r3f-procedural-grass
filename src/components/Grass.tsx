@@ -1,9 +1,11 @@
 import { useMemo, useEffect, useRef } from 'react';
 import * as THREE from 'three'
 import { useControls } from 'leva'
+import { useFrame } from '@react-three/fiber'
 import CustomShaderMaterial from 'three-custom-shader-material'
 import CustomShaderMaterialVanilla from 'three-custom-shader-material/vanilla'
 import utility from '@packages/r3f-gist/shaders/cginc/math/utility.glsl'
+import fractal from '@packages/r3f-gist/shaders/cginc/noise/fractal.glsl'
 
 // ============================================================================
 // Constants
@@ -20,6 +22,7 @@ const BLADE_SEGMENTS = 14;
 // ============================================================================
 const grassVertex = /* glsl */ `
   ${utility}
+  ${fractal}
 
   // ============================================================================
   // Attributes & Uniforms
@@ -31,6 +34,13 @@ const grassVertex = /* glsl */ `
   uniform float clumpSize;
   uniform float clumpRadius;
   uniform float thicknessStrength;
+  
+  // Wind uniforms
+  uniform float uTime;
+  uniform vec2 uWindDir;
+  uniform float uWindSpeed;
+  uniform float uWindStrength;
+  uniform float uWindScale;
 
   // ============================================================================
   // Varyings
@@ -143,6 +153,12 @@ const grassVertex = /* glsl */ `
     return gp;
   }
 
+  // Returns wind scalar [0..1]
+  float sampleWind(vec2 worldXZ) {
+    float n = fbm2(worldXZ * uWindScale, uTime * uWindSpeed);
+    return n;
+  }
+
   // ============================================================================
   // Bezier Curve Functions
   // ============================================================================
@@ -190,7 +206,36 @@ const grassVertex = /* glsl */ `
     float width = gp.width;
     float bend = gp.bend;
 
-    // 4. Bezier Curve Shape Generation
+    // 4. Wind Field Sampling
+    float wind = sampleWind(worldXZ);
+    
+    // Clump consistency: shared phase for clump
+    float clumpPhase = hash11(dot(cellId, vec2(17.0, 91.0))) * 6.28318;
+    float gust = sin(uTime * 0.8 + clumpPhase);
+    float windS = (wind * 2.0 - 1.0) * uWindStrength * mix(0.8, 1.2, gust * 0.5 + 0.5);
+    
+    // 5. Decide blade facing first (before wind push)
+    vec2 clumpDir = toCenter;
+    float clumpAngle = atan(clumpDir.y, clumpDir.x);
+    float perBladeHash = hash11(dot(seed, vec2(37.0, 17.0)));
+    float randomOffset = (perBladeHash - 0.5) * 1.2;
+    float baseAngle = clumpAngle + randomOffset;
+    
+    // Clump shared yaw (makes clumps more consistent)
+    float clumpYaw = (hash11(dot(cellId, vec2(9.7, 3.1))) - 0.5) * 0.25;
+    baseAngle += clumpYaw;
+    
+    // Wind affects blade facing (low frequency)
+    float windAngle = atan(uWindDir.y, uWindDir.x);
+    float windFacing = (wind * 2.0 - 1.0) * 0.35 * uWindStrength;
+    float anglePre = mix(baseAngle, windAngle, 0.25 * uWindStrength) + windFacing;
+    
+    // Blade facing in XZ (object space)
+    vec2 facingXZ = vec2(cos(anglePre), sin(anglePre));
+    // Horizontal perpendicular (left/right) - this is the direction wind pushes
+    vec2 perpXZ = vec2(-facingXZ.y, facingXZ.x);
+    
+    // 6. Bezier Curve Shape Generation
     vec3 p0 = vec3(0.0, 0.0, 0.0);
     vec3 p2 = vec3(0.0, height, 0.0);
     
@@ -203,24 +248,40 @@ const grassVertex = /* glsl */ `
       p1 = vec3(0.0, height * 0.8, bend * 1.0);
     }
     
+    // Wind push along blade perpendicular direction (consistent with facing)
+    float tipPush = windS * height * 0.35;
+    float midPush = windS * height * 0.15;
+    
+    p1 += vec3(perpXZ.x, 0.0, perpXZ.y) * midPush;
+    p2 += vec3(perpXZ.x, 0.0, perpXZ.y) * tipPush;
+    
+    // Bobbing phase (high frequency sway) - use perpXZ instead of side
+    float phase = hash11(dot(seed, vec2(12.3, 78.9))) * 6.28318;
+    float sway = sin(uTime * (1.8 + wind * 1.2) + phase + t * 2.2);
+    float swayAmt = uWindStrength * 0.02 * height * wind;
+    
+    // Apply bobbing sway along perpendicular direction
+    p2 += vec3(perpXZ.x, 0.0, perpXZ.y) * (sway * swayAmt);
+    
+    // Recalculate spine and tangent after all wind effects
     vec3 spine = bezier2(p0, p1, p2, t);
     vec3 tangent = normalize(bezier2Tangent(p0, p1, p2, t));
 
-    // 5. TBN Frame Construction (UE-style Derive Normals)
+    // 7. TBN Frame Construction (UE-style Derive Normals)
     vec3 ref = vec3(0.0, 0.0, 1.0);
     vec3 side = normalize(cross(ref, tangent));
     vec3 normal = normalize(cross(side, tangent));
 
-    // 6. Blade Geometry
+    // 8. Blade Geometry
     float widthFactor = (t + gp.baseWidth) * pow(1.0 - t, gp.tipThin);
     vec3 lpos = spine + side * width * widthFactor * s * presence;
     
-    // 7. Clump-Based Rotation
-    vec2 clumpDir = toCenter;
-    float clumpAngle = atan(clumpDir.y, clumpDir.x);
-    float perBladeHash = hash11(dot(seed, vec2(37.0, 17.0)));
-    float randomOffset = (perBladeHash - 0.5) * 1.2;
-    float angle = clumpAngle + randomOffset;
+    // Additional tip-weighted wind push (Ghost-style: root 0, tip strong)
+    float tipWeight = smoothstep(0.1, 1.0, t);
+    lpos += vec3(perpXZ.x, 0.0, perpXZ.y) * (windS * height * 0.05) * tipWeight;
+    
+    // 9. Apply rotation using pre-calculated angle
+    float angle = anglePre;
     
     lpos.xz = rotate2D(lpos.xz, angle);
     tangent.xz = rotate2D(tangent.xz, angle);
@@ -231,11 +292,11 @@ const grassVertex = /* glsl */ `
     side = normalize(side);
     normal = normalize(normal);
     
-    // 8. Transform to World Space
+    // 10. Transform to World Space
     vec3 posObj = lpos + instanceOffset;
     vec3 posW = (modelMatrix * vec4(posObj, 1.0)).xyz;
     
-    // 9. View-dependent Tilt (Ghost/UE-style)
+    // 11. View-dependent Tilt (Ghost/UE-style)
     vec3 camDirW = normalize(cameraPosition - posW);
     
     vec3 tangentW = normalize((modelMatrix * vec4(tangent, 0.0)).xyz);
@@ -259,16 +320,19 @@ const grassVertex = /* glsl */ `
     float tilt = thicknessStrength * edgeMask * centerMask;
     vec3 nXZ = normalize(normal * vec3(1.0, 0.0, 1.0));
     vec3 posObjTilted = posObj + nXZ * tilt;
+    
+    // Update world position with tilted position
+    vec3 posWTilted = (modelMatrix * vec4(posObjTilted, 1.0)).xyz;
 
-    // 10. CSM Output
+    // 12. CSM Output
     csm_Position = posObjTilted;
 
-    // 11. Varyings
+    // 13. Varyings
     vN = -normal;
     vTangent = tangent;
     vSide = side;
     vToCenter = toCenter;
-    vWorldPos = posW;
+    vWorldPos = posWTilted;
     vTest = vec3(edgeMask, 0.0, 0.0);
     vUv = uv;
     vHeight = t;
@@ -442,6 +506,14 @@ export default function Grass() {
         envMapIntensity: { value: 1.0, min: 0.0, max: 3.0, step: 0.1 },
     })
 
+    const wind = useControls('Wind', {
+        dirX: { value: 1, min: -1, max: 1, step: 0.01 },
+        dirZ: { value: 0, min: -1, max: 1, step: 0.01 },
+        speed: { value: 0.6, min: 0, max: 3, step: 0.01 },
+        strength: { value: 0.35, min: 0, max: 2, step: 0.01 },
+        scale: { value: 0.25, min: 0.01, max: 2, step: 0.01 },
+    })
+
     const emissiveColor = useMemo(() => new THREE.Color(materialControls.emissive as any), [materialControls.emissive])
 
     const uniforms = useRef({
@@ -453,6 +525,12 @@ export default function Grass() {
         thicknessStrength: { value: 0.02 },
         baseColor: { value: new THREE.Vector3(0.18, 0.35, 0.12) },
         tipColor: { value: new THREE.Vector3(0.35, 0.65, 0.28) },
+        // Wind uniforms
+        uTime: { value: 0 },
+        uWindDir: { value: new THREE.Vector2(1, 0) },
+        uWindSpeed: { value: 0.6 },
+        uWindStrength: { value: 0.35 },
+        uWindScale: { value: 0.25 },
     }).current
 
     // Create depth material for directional/spot light shadows
@@ -487,9 +565,21 @@ export default function Grass() {
         const tipColorVec = new THREE.Color(tipColor as any)
         uniforms.tipColor.value.set(tipColorVec.r, tipColorVec.g, tipColorVec.b)
         
+        // Update wind uniforms
+        const windDir = new THREE.Vector2(wind.dirX, wind.dirZ).normalize()
+        uniforms.uWindDir.value.set(windDir.x, windDir.y)
+        uniforms.uWindSpeed.value = wind.speed
+        uniforms.uWindStrength.value = wind.strength
+        uniforms.uWindScale.value = wind.scale
+        
         // Trigger shadow material to recompile when uniforms change
         depthMat.needsUpdate = true
-    }, [bladeHeight, bladeWidth, bendAmount, clumpSize, clumpRadius, thicknessStrength, baseColor, tipColor, depthMat])
+    }, [bladeHeight, bladeWidth, bendAmount, clumpSize, clumpRadius, thicknessStrength, baseColor, tipColor, wind, depthMat])
+
+    // Update time every frame for wind animation
+    useFrame((state) => {
+        uniforms.uTime.value = state.clock.elapsedTime
+    })
 
 
     return (
