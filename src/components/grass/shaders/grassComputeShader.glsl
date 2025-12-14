@@ -33,6 +33,12 @@ vec2 hash2(vec2 p) {
   return fract(sin(vec2(x, y)) * 43758.5453);
 }
 
+// Safe normalize to avoid NaN when vector is zero
+vec2 safeNormalize(vec2 v) {
+  float m2 = dot(v, v);
+  return (m2 > 1e-6) ? v * inversesqrt(m2) : vec2(1.0, 0.0);
+}
+
 // Note: simplexNoise3d and fbm2 are now included from fractal.glsl via useGrassCompute hook
 
 // Voronoi clump calculation (matching CPU version exactly)
@@ -126,13 +132,15 @@ void main() {
   
   // Calculate windStrength01: sample wind field using fbm2 with wind direction displacement
   // 1) Normalize wind direction to avoid mixing wind speed with vector length
-  vec2 windDir = normalize(uWindDir);
+  // Use safeNormalize to avoid NaN when uWindDir is zero vector
+  vec2 windDir = safeNormalize(uWindDir);
   
   // Push noise field along wind direction
   vec2 windUv = worldXZ * uWindScale + windDir * uTime * uWindSpeed;
   
-  // 3) Sample wind strength (0~1)
-  float windStrength01 = fbm2(windUv, 0.0); // [0, 1] range
+  // 3) Sample wind strength (0~1) and clamp to ensure valid range
+  float windStrength01 = fbm2(windUv, 0.0); // May not be exactly [0, 1] range
+  windStrength01 = clamp(windStrength01, 0.0, 1.0); // Clamp to [0, 1] for safety
   
   // Step 2: Bias baseAngle towards wind direction (Ghost-style wind-facing)
   float windAngle = atan(windDir.y, windDir.x);

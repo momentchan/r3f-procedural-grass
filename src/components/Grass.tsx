@@ -93,8 +93,8 @@ export default function Grass() {
         // Wind uniforms
         uTime: { value: 0 },
         uWindStrength: { value: 0.35 }, // Still needed for scaling wind effects in vertex shader
-        uWindSpeed: { value: 0.6 }, // Needed for phase calculation
         uWindDir: { value: new THREE.Vector2(1, 0) }, // Wind direction for sway direction
+        // Note: uWindSpeed is only used in compute shader for wind field translation
     }).current
 
     // Update texture uniforms when render targets change
@@ -134,8 +134,8 @@ export default function Grass() {
         // Update wind uniforms
         const windDir = new THREE.Vector2(wind.dirX, wind.dirZ).normalize()
         uniforms.uWindStrength.value = wind.strength
-        uniforms.uWindSpeed.value = wind.speed
         uniforms.uWindDir.value.set(windDir.x, windDir.y)
+        // Note: uWindSpeed is only updated in compute shader
         
         // Update compute shader wind uniforms
         computeMaterial.uniforms.uWindScale.value = wind.scale

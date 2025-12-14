@@ -17,8 +17,8 @@ uniform float thicknessStrength;
 // Wind uniforms
 uniform float uTime;
 uniform float uWindStrength; // Still needed for scaling wind effects in vertex shader
-uniform float uWindSpeed; // Needed for phase calculation (Step 4)
 uniform vec2 uWindDir; // Wind direction for sway direction (Step 3)
+// Note: uWindSpeed is only used in compute shader for wind field translation, not for sway frequency
 
 // ============================================================================
 // Varyings
@@ -43,6 +43,15 @@ float hash11(float x) {
 
 // Note: Wind sampling is now done in compute shader and passed via MotionSeedsRT
 // This ensures coherence across the entire pipeline (compute -> vertex -> fragment)
+
+// ============================================================================
+// Utility Functions
+// ============================================================================
+// Safe normalize to avoid NaN when vector is zero
+vec2 safeNormalize(vec2 v) {
+  float m2 = dot(v, v);
+  return (m2 > 1e-6) ? v * inversesqrt(m2) : vec2(1.0, 0.0);
+}
 
 // ============================================================================
 // Bezier Curve Functions
@@ -95,8 +104,7 @@ void main() {
   // Use windStrength01 from compute shader (coherent across pipeline)
   float wind = windStrength01; // Already in [0, 1] range from compute shader
   
-  // Convert windStrength01 to wind scalar [-1, 1] range
-  float windS = (wind * 2.0 - 1.0) * uWindStrength;
+  float windS =  wind * uWindStrength;
   
   // Use facingAngle01 from compute shader (convert from [0, 1] to radians)
   float facingAngle = facingAngle01 * 6.28318530718; // Convert [0, 1] to [0, 2π]
@@ -108,7 +116,8 @@ void main() {
   vec2 perpXZ = vec2(-facingXZ.y, facingXZ.x);
   
   // Wind direction vector (for large-scale wind push, not blade-specific)
-  vec2 windDir = normalize(uWindDir);
+  // Use safeNormalize to avoid NaN when uWindDir is zero vector
+  vec2 windDir = safeNormalize(uWindDir);
   vec3 windPushDir = vec3(windDir.x, 0.0, windDir.y);
   
   // 4. Cubic Bezier Curve Shape Generation (4 control points - matches Ghost)
@@ -143,12 +152,21 @@ void main() {
   // Bobbing phase (high frequency sway) - use perBladeHash01 from compute shader for coherence
   // Step 4: Add second layer wind noise for more complex motion (Ghost-style)
   // This adds subtle per-blade variation without breaking large-scale flow
-  float phase = uTime * uWindSpeed + perBladeHash01 * 6.28318 + windStrength01 * 2.0;
-  float sway = sin(uTime * (1.8 + wind * 1.2) + phase + t * 2.2);
+  // Note: uWindSpeed is only for wind field translation, not sway frequency
+  // Sway frequency should be independent to avoid over-synchronization with gusts
+  float phase = perBladeHash01 * 6.28318 + windStrength01 * 2.0;
   float swayAmt = uWindStrength * 0.02 * height * wind;
   
-  // Apply bobbing sway along wind direction (consistent with large-scale push)
-  p3 += windPushDir * (sway * swayAmt);
+  // Multi-point sway for more fluid motion (not just tip swaying)
+  // Different phases at different heights create wave-like flow
+  float sway1 = sin(uTime * (1.8 + wind * 1.2) + phase + 0.7 * 2.2);
+  float sway2 = sin(uTime * (1.8 + wind * 1.2) + phase + 0.85 * 2.2);
+  float sway = sin(uTime * (1.8 + wind * 1.2) + phase + t * 2.2);
+  
+  // Apply bobbing sway along wind direction with different weights at different control points
+  p1 += windPushDir * (sway1 * swayAmt * 0.25);
+  p2 += windPushDir * (sway2 * swayAmt * 0.55);
+  p3 += windPushDir * (sway * swayAmt * 1.00);
   
   // Recalculate spine and tangent after all wind effects using cubic bezier
   vec3 spine = bezier3(p0, p1, p2, p3, t);
