@@ -14,9 +14,11 @@ uniform vec2 uGrassTextureSize; // texture resolution (GRID_SIZE)
 
 uniform float thicknessStrength;
 
-// Wind uniforms (uWindDir and uWindSpeed removed - wind sampling now in compute shader)
+// Wind uniforms
 uniform float uTime;
 uniform float uWindStrength; // Still needed for scaling wind effects in vertex shader
+uniform float uWindSpeed; // Needed for phase calculation (Step 4)
+uniform vec2 uWindDir; // Wind direction for sway direction (Step 3)
 
 // ============================================================================
 // Varyings
@@ -102,8 +104,12 @@ void main() {
   
   // Blade facing in XZ (object space)
   vec2 facingXZ = vec2(cos(anglePre), sin(anglePre));
-  // Horizontal perpendicular (left/right) - this is the direction wind pushes
+  // Horizontal perpendicular (left/right) - used for blade width/side direction
   vec2 perpXZ = vec2(-facingXZ.y, facingXZ.x);
+  
+  // Wind direction vector (for large-scale wind push, not blade-specific)
+  vec2 windDir = normalize(uWindDir);
+  vec3 windPushDir = vec3(windDir.x, 0.0, windDir.y);
   
   // 4. Cubic Bezier Curve Shape Generation (4 control points - matches Ghost)
   // p0 = base (root, fixed)
@@ -124,23 +130,25 @@ void main() {
     p2 = vec3(0.0, height * 0.65, bend * 1.0);
   }
   
-  // Wind push along blade perpendicular direction (consistent with facing)
+  // Wind push along wind direction (Ghost-style: large-scale displacement follows wind)
   // Ghost-style: root stable (p0), mid moderate (p1, p2), tip strongest (p3)
   float tipPush = windS * height * 0.35;
   float midPush1 = windS * height * 0.1;  // Lower mid push
   float midPush2 = windS * height * 0.2; // Upper mid push
   
-  p1 += vec3(perpXZ.x, 0.0, perpXZ.y) * midPush1;
-  p2 += vec3(perpXZ.x, 0.0, perpXZ.y) * midPush2;
-  p3 += vec3(perpXZ.x, 0.0, perpXZ.y) * tipPush;
+  p1 += windPushDir * midPush1;
+  p2 += windPushDir * midPush2;
+  p3 += windPushDir * tipPush;
   
   // Bobbing phase (high frequency sway) - use perBladeHash01 from compute shader for coherence
-  float phase = perBladeHash01 * 6.28318; // Use compute-generated hash (already in [0, 1])
+  // Step 4: Add second layer wind noise for more complex motion (Ghost-style)
+  // This adds subtle per-blade variation without breaking large-scale flow
+  float phase = uTime * uWindSpeed + perBladeHash01 * 6.28318 + windStrength01 * 2.0;
   float sway = sin(uTime * (1.8 + wind * 1.2) + phase + t * 2.2);
   float swayAmt = uWindStrength * 0.02 * height * wind;
   
-  // Apply bobbing sway along perpendicular direction (tip-weighted)
-  p3 += vec3(perpXZ.x, 0.0, perpXZ.y) * (sway * swayAmt);
+  // Apply bobbing sway along wind direction (consistent with large-scale push)
+  p3 += windPushDir * (sway * swayAmt);
   
   // Recalculate spine and tangent after all wind effects using cubic bezier
   vec3 spine = bezier3(p0, p1, p2, p3, t);
@@ -158,8 +166,18 @@ void main() {
   vec3 lpos = spine + side * width * widthFactor * s * presence;
   
   // Additional tip-weighted wind push (Ghost-style: root 0, tip strong)
-  float tipWeight = smoothstep(0.1, 1.0, t);
-  lpos += vec3(perpXZ.x, 0.0, perpXZ.y) * (windS * height * 0.05) * tipWeight;
+  // Note: Removed duplicate wind push - wind effects are now handled in bezier control points above
+  // float tipWeight = smoothstep(0.1, 1.0, t);
+  // lpos += vec3(perpXZ.x, 0.0, perpXZ.y) * (windS * height * 0.05) * tipWeight;
+  
+  // Step 3: Apply sway offset using full wind direction vector
+  // COMMENTED OUT: Avoid double wind push - sway is now handled in bezier control points above
+  // vec2 windDir = normalize(uWindDir);
+  // float windPush = windS * height * 0.05;
+  // vec3 swayOffset = vec3(0.0);
+  // swayOffset.x += windDir.x * windPush * tipWeight * sway;
+  // swayOffset.z += windDir.y * windPush * tipWeight * sway;
+  // lpos += swayOffset;
   
   // 7. Apply rotation using pre-calculated angle
   float angle = anglePre;

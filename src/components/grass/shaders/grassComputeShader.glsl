@@ -9,6 +9,7 @@ uniform float clumpRadius;
 uniform float uTime;
 uniform float uWindScale;
 uniform float uWindSpeed;
+uniform vec2 uWindDir; // Wind direction vector
 
 // Multiple render targets output declarations (WebGL2/GLSL ES 3.00)
 layout(location = 0) out vec4 outBladeParams; // bladeParams: height, width, bend, type
@@ -123,16 +124,34 @@ void main() {
   float clumpYaw = (clumpHash - 0.5) * 0.25;
   float baseAngle = clumpAngle + randomOffset + clumpYaw;
   
-  // Calculate facingAngle01: convert baseAngle from [-π, π] to [0, 1]
-  // atan returns [-π, π], normalize to [0, 2π] then to [0, 1]
-  float facingAngle = baseAngle;
-  if (facingAngle < 0.0) {
-    facingAngle += 6.28318530718; // Add 2π if negative
-  }
-  float facingAngle01 = facingAngle / 6.28318530718; // Normalize to [0, 1]
+  // Calculate windStrength01: sample wind field using fbm2 with wind direction displacement
+  // 1) Normalize wind direction to avoid mixing wind speed with vector length
+  vec2 windDir = normalize(uWindDir);
   
-  // Calculate windStrength01: sample wind field using fbm2 (coherent across pipeline)
-  float windStrength01 = fbm2(worldXZ * uWindScale, uTime * uWindSpeed); // [0, 1] range
+  // Push noise field along wind direction
+  vec2 windUv = worldXZ * uWindScale + windDir * uTime * uWindSpeed;
+  
+  // 3) Sample wind strength (0~1)
+  float windStrength01 = fbm2(windUv, 0.0); // [0, 1] range
+  
+  // Step 2: Bias baseAngle towards wind direction (Ghost-style wind-facing)
+  float windAngle = atan(windDir.y, windDir.x);
+  
+  // Wind influence strength (can be made uniform later)
+  float windFacing = 0.6; // Constant for now, can be made uniform later
+  
+  // Blend baseAngle towards windAngle (handle angle wrap)
+  float a = baseAngle;
+  float b = windAngle;
+  
+  // Angle difference wrapped to [-pi, pi]
+  float d = atan(sin(b - a), cos(b - a));
+  baseAngle = a + d * (windFacing * windStrength01);
+  
+  // Calculate facingAngle01: wrap baseAngle to [-π, π] first, then normalize to [0, 1]
+  // This is more stable than using fract directly, as baseAngle may exceed [-π, π] range
+  baseAngle = atan(sin(baseAngle), cos(baseAngle)); // Wrap to [-π, π]
+  float facingAngle01 = (baseAngle + 3.14159265359) / 6.28318530718; // Normalize [-π, π] to [0, 1]
   
   // Calculate lodSeed01: random seed for LOD culling
   float lodSeed01 = hash11(dot(worldXZ, vec2(19.3, 53.7)));

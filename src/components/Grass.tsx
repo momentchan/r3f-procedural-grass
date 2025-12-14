@@ -64,6 +64,11 @@ export default function Grass() {
     const emissiveColor = useMemo(() => new THREE.Color(materialControls.emissive as any), [materialControls.emissive])
 
     // Use grass compute hook for Multiple Render Targets (before uniforms definition)
+    const windDirVec = useMemo(() => {
+        const dir = new THREE.Vector2(wind.dirX, wind.dirZ).normalize()
+        return dir
+    }, [wind.dirX, wind.dirZ])
+    
     const { bladeParamsRT, clumpDataRT, additionalDataRT, computeMaterial, compute } = useGrassCompute(
         bladeHeight,
         bladeWidth,
@@ -72,7 +77,8 @@ export default function Grass() {
         clumpRadius,
         0.0, // uTime initial value
         wind.scale,
-        wind.speed
+        wind.speed,
+        windDirVec
     )
 
     const uniforms = useRef({
@@ -87,6 +93,8 @@ export default function Grass() {
         // Wind uniforms
         uTime: { value: 0 },
         uWindStrength: { value: 0.35 }, // Still needed for scaling wind effects in vertex shader
+        uWindSpeed: { value: 0.6 }, // Needed for phase calculation
+        uWindDir: { value: new THREE.Vector2(1, 0) }, // Wind direction for sway direction
     }).current
 
     // Update texture uniforms when render targets change
@@ -124,14 +132,15 @@ export default function Grass() {
         uniforms.tipColor.value.set(tipColorVec.r, tipColorVec.g, tipColorVec.b)
         
         // Update wind uniforms
-        // Note: uWindDir, uWindSpeed, uWindScale are no longer used in vertex shader
-        // Wind direction is handled by facingAngle01 from compute shader
-        // Wind speed/scale are only used in compute shader for wind field sampling
+        const windDir = new THREE.Vector2(wind.dirX, wind.dirZ).normalize()
         uniforms.uWindStrength.value = wind.strength
+        uniforms.uWindSpeed.value = wind.speed
+        uniforms.uWindDir.value.set(windDir.x, windDir.y)
         
         // Update compute shader wind uniforms
         computeMaterial.uniforms.uWindScale.value = wind.scale
         computeMaterial.uniforms.uWindSpeed.value = wind.speed
+        computeMaterial.uniforms.uWindDir.value.set(windDir.x, windDir.y)
         
         // Trigger shadow material to recompile when uniforms change
         depthMat.needsUpdate = true

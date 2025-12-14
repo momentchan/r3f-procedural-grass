@@ -17,7 +17,8 @@ export function useGrassCompute(
     clumpRadius: number,
     uTime: number,
     uWindScale: number,
-    uWindSpeed: number
+    uWindSpeed: number,
+    uWindDir: THREE.Vector2
 ) {
     const gl = useThree((state) => state.gl)
     
@@ -64,8 +65,9 @@ export function useGrassCompute(
             uTime: { value: uTime },
             uWindScale: { value: uWindScale },
             uWindSpeed: { value: uWindSpeed },
+            uWindDir: { value: uWindDir },
         }
-    }), [positionTexture, bladeHeight, bladeWidth, bendAmount, clumpSize, clumpRadius, uTime, uWindScale, uWindSpeed])
+    }), [positionTexture, bladeHeight, bladeWidth, bendAmount, clumpSize, clumpRadius, uTime, uWindScale, uWindSpeed, uWindDir])
 
     // Create fullscreen quad for compute pass
     const computeScene = useMemo(() => {
@@ -99,7 +101,8 @@ export function useGrassCompute(
         grassComputeMat.uniforms.uTime.value = uTime
         grassComputeMat.uniforms.uWindScale.value = uWindScale
         grassComputeMat.uniforms.uWindSpeed.value = uWindSpeed
-    }, [bladeHeight, bladeWidth, bendAmount, clumpSize, clumpRadius, uTime, uWindScale, uWindSpeed, grassComputeMat])
+        grassComputeMat.uniforms.uWindDir.value = uWindDir
+    }, [bladeHeight, bladeWidth, bendAmount, clumpSize, clumpRadius, uTime, uWindScale, uWindSpeed, uWindDir, grassComputeMat])
 
     return {
         bladeParamsRT,
