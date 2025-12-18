@@ -18,12 +18,14 @@ uniform float uCenterYaw;
 uniform float uBladeYaw;
 uniform float uClumpYaw;
 uniform vec3 uBladeRandomness; // (height, width, bend) randomness multiplier
+uniform float uTypeTrendScale; // Scale factor for type trend noise (default 0.1)
 
 // Wind uniforms for compute pass
 uniform float uWindFacing; // Wind influence strength (0.0 = no influence, 1.0 = full influence)
 uniform float uTime;
 uniform float uWindScale;
 uniform float uWindSpeed;
+uniform float uWindStrength; // Wind strength multiplier
 uniform vec2 uWindDir; // Wind direction vector
 
 
@@ -129,9 +131,11 @@ vec4 getClumpParams(vec2 cellId) {
   float clumpBaseHeight = mix(bladeHeightMin, bladeHeightMax, c1.x);
   float clumpBaseWidth = mix(bladeWidthMin, bladeWidthMax, c1.y);
   float clumpBaseBend = mix(bendAmountMin, bendAmountMax, c2.x);
-  float clumpType = floor(c2.y * 3.0);
+  
+  float typeTrend = simplexNoise2d(cellId * uTypeTrendScale);
+  typeTrend = typeTrend * 0.5 + 0.5;
 
-  return vec4(clumpBaseHeight, clumpBaseWidth, clumpBaseBend, clumpType);
+  return vec4(clumpBaseHeight, clumpBaseWidth, clumpBaseBend, typeTrend);
 }
 
 // Generate per-blade parameters based on clump params
@@ -188,7 +192,7 @@ float calculateWindStrength(vec2 worldXZ) {
   vec2 windUv = worldXZ * uWindScale + windDir * uTime * uWindSpeed;
   
   float windStrength01 = fbm2(windUv, 0.0);
-  return clamp(windStrength01, 0.0, 1.0);
+  return clamp(windStrength01 * uWindStrength, 0.0, 1.0);
 }
 
 // ============================================================================
@@ -224,12 +228,12 @@ void main() {
   float baseAngle = calculateBaseAngle(toCenter, worldXZ, cellId, perBladeHash01);
   
   // 7. Apply wind effects
-  float windStrength01 = calculateWindStrength(worldXZ);
+  float windStrength = calculateWindStrength(worldXZ); // Apply wind strength multiplier
   vec2 windDir = safeNormalize(uWindDir);
-  float facingAngle01 = applyWindFacingAndNormalize(baseAngle, windDir, windStrength01);
+  float facingAngle01 = applyWindFacingAndNormalize(baseAngle, windDir, windStrength);
 
   // 8. Output to multiple render targets
   outBladeParams = bladeParams;
   outClumpData = vec4(toCenter.x, toCenter.y, presence, clumpSeed01);
-  outMotionSeeds = vec4(facingAngle01, perBladeHash01, windStrength01, lodSeed01);
+  outMotionSeeds = vec4(facingAngle01, perBladeHash01, windStrength, lodSeed01);
 }

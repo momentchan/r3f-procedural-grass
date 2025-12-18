@@ -23,6 +23,7 @@ export interface GrassComputeConfig {
     uBladeYaw: number
     uClumpYaw: number
     uBladeRandomness: THREE.Vector3 // (height, width, bend) randomness multiplier
+    uTypeTrendScale: number // Scale factor for type trend noise
     
     // Wind parameters
     uTime: number
@@ -30,6 +31,7 @@ export interface GrassComputeConfig {
     uWindSpeed: number
     uWindDir: THREE.Vector2
     uWindFacing: number
+    uWindStrength: number
 }
 
 export function useGrassCompute(config: GrassComputeConfig) {
@@ -82,11 +84,13 @@ export function useGrassCompute(config: GrassComputeConfig) {
             uBladeYaw: { value: config.uBladeYaw },
             uClumpYaw: { value: config.uClumpYaw },
             uBladeRandomness: { value: config.uBladeRandomness },
+            uTypeTrendScale: { value: config.uTypeTrendScale },
             uTime: { value: config.uTime },
             uWindScale: { value: config.uWindScale },
             uWindSpeed: { value: config.uWindSpeed },
             uWindDir: { value: config.uWindDir },
             uWindFacing: { value: config.uWindFacing },
+            uWindStrength: { value: config.uWindStrength },
         }
     }), [positionTexture, config])
 
@@ -126,11 +130,13 @@ export function useGrassCompute(config: GrassComputeConfig) {
         grassComputeMat.uniforms.uBladeYaw.value = config.uBladeYaw
         grassComputeMat.uniforms.uClumpYaw.value = config.uClumpYaw
         grassComputeMat.uniforms.uBladeRandomness.value = config.uBladeRandomness
+        grassComputeMat.uniforms.uTypeTrendScale.value = config.uTypeTrendScale
         grassComputeMat.uniforms.uTime.value = config.uTime
         grassComputeMat.uniforms.uWindScale.value = config.uWindScale
         grassComputeMat.uniforms.uWindSpeed.value = config.uWindSpeed
         grassComputeMat.uniforms.uWindDir.value = config.uWindDir
         grassComputeMat.uniforms.uWindFacing.value = config.uWindFacing
+        grassComputeMat.uniforms.uWindStrength.value = config.uWindStrength
     }, [config, grassComputeMat])
 
     return {

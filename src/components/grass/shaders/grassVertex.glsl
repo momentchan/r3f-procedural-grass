@@ -10,7 +10,6 @@ uniform vec2 uGrassTextureSize;
 
 uniform float thicknessStrength;
 uniform float uTime;
-uniform float uWindStrength;
 uniform vec2 uWindDir;
 uniform float uSwayFreqMin;
 uniform float uSwayFreqMax;
@@ -18,7 +17,8 @@ uniform float uSwayStrength;
 uniform float uBaseWidth;
 uniform float uTipThin;
 uniform vec2 uLODRange; // x: start fold distance, y: full fold distance
-uniform vec2 uCullRange; // x: cull distance, y: cull fade range
+uniform vec3 uCullParams; // x: cull start distance, y: cull end distance, z: width compensation strength
+uniform vec2 uWindDistanceRange; // x: wind start fade distance, y: wind end fade distance (farther = less wind)
 
 // ============================================================================
 // Varyings
@@ -64,9 +64,9 @@ vec3 getWindDirection() {
   return vec3(safeNormalize(uWindDir), 0.0).xzy;
 }
 
-void applyWindPush(inout vec3 p1, inout vec3 p2, inout vec3 p3, float windStrength01, float height) {
+void applyWindPush(inout vec3 p1, inout vec3 p2, inout vec3 p3, float windStrength, float height) {
   vec3 windDir = getWindDirection();
-  float windScale = windStrength01 * uWindStrength;
+  float windScale = windStrength;
   
   float tipPush = windScale * height * 0.25;
   float midPush1 = windScale * height * 0.08;
@@ -79,7 +79,7 @@ void applyWindPush(inout vec3 p1, inout vec3 p2, inout vec3 p3, float windStreng
 
 void applyWindSway(
   inout vec3 p1, inout vec3 p2, inout vec3 p3,
-  float windStrength01, float height, float perBladeHash01, float t,
+  float windStrength, float height, float perBladeHash01, float t,
   vec2 worldXZ
 ) {
   // Two directions: along wind + cross wind (adds natural "twist")
@@ -103,7 +103,8 @@ void applyWindSway(
   float high = sin(uTime * (baseFreq * 5.0) + phase * 1.7 + t * 5.0);
 
   // Amplitude: keep it small. (your old 2.2 is the reason it's jelly)
-  float amp = uWindStrength * height * windStrength01;
+  // windStrength already has uWindStrength applied from compute shader
+  float amp = height * windStrength;
   float swayLow  = amp * gust * uSwayStrength;  // main motion
   float swayHigh = amp * 0.8 * uSwayStrength;         // small detail
 
@@ -148,11 +149,12 @@ vec3 applyViewDependentTilt(
 // ============================================================================
 // Blade Shape Functions
 // ============================================================================
-void getBezierControlPoints(float bladeType, float height, float bend, out vec3 p1, out vec3 p2) {
-  if (bladeType < 0.5) {
+void getBezierControlPoints(float discreteType, float height, float bend, out vec3 p1, out vec3 p2) {
+  // Use strictly the chosen type (no mix functions)
+  if (discreteType == 0.0) {
     p1 = vec3(0.0, height * 0.4, bend * 0.5);
     p2 = vec3(0.0, height * 0.75, bend * 0.7);
-  } else if (bladeType < 1.5) {
+  } else if (discreteType == 1.0) {
     p1 = vec3(0.0, height * 0.35, bend * 0.6);
     p2 = vec3(0.0, height * 0.7, bend * 0.8);
   } else {
@@ -216,7 +218,7 @@ void main() {
   float height = bladeParams.x;
   float width = bladeParams.y;
   float bend = bladeParams.z;
-  float bladeType = bladeParams.w;
+  float bladeType = floor(bladeParams.w * 3.0);
   
   vec2 toCenter = clumpData.xy;
   float presence = clumpData.z;
@@ -224,58 +226,76 @@ void main() {
   
   float facingAngle01 = motionSeeds.x;
   float perBladeHash01 = motionSeeds.y;
-  float windStrength01 = motionSeeds.z;
+  float windStrength = motionSeeds.z;
   
   float facingAngle = facingAngle01 * PI * 2.0;
 
-  // 4. Bezier Control Points
+  // 4. Calculate distance for wind falloff (farther = less wind)
+  vec3 worldBasePos = (modelMatrix * vec4(instanceOffset, 1.0)).xyz;
+  float dist = length(cameraPosition - worldBasePos);
+  
+  // Calculate wind distance falloff (1.0 = full wind at near, 0.0 = no wind at far)
+  // If uWindDistanceRange is not set (0,0), use full wind strength
+  float windDistanceFalloff = 1.0;
+  if (uWindDistanceRange.y > 0.0) {
+    windDistanceFalloff = 1.0 - smoothstep(uWindDistanceRange.x, uWindDistanceRange.y, dist);
+  }
+  
+  // Apply distance-based wind falloff
+  windStrength *= windDistanceFalloff;
+
+  // 5. Bezier Control Points
   vec3 p0 = vec3(0.0, 0.0, 0.0);
   vec3 p3 = vec3(0.0, height, 0.0);
   vec3 p1, p2;
   getBezierControlPoints(bladeType, height, bend, p1, p2);
 
-  // 5. Apply Wind Effects (use positionT for wind calculations)
-  applyWindPush(p1, p2, p3, windStrength01, height);
-  applyWindSway(p1, p2, p3, windStrength01, height, perBladeHash01, positionT, instanceOffset.xz);
+  // 6. Apply Wind Effects (use positionT for wind calculations)
+  applyWindPush(p1, p2, p3, windStrength, height);
+  applyWindSway(p1, p2, p3, windStrength, height, perBladeHash01, positionT, instanceOffset.xz);
 
-  // 6. Calculate Spine and Tangent using positionT (for geometry position)
+  // 7. Calculate Spine and Tangent using positionT (for geometry position)
   vec3 spine = bezier3(p0, p1, p2, p3, positionT);
   vec3 tangent = normalize(bezier3Tangent(p0, p1, p2, p3, positionT));
 
-  // 7. TBN Frame
+  // 8. TBN Frame
   vec3 ref = vec3(0.0, 0.0, 1.0);
   vec3 side = normalize(cross(ref, tangent));
   vec3 normal = normalize(cross(side, tangent));
 
-  // 8. Per-Instance Culling (Density-based random culling)
-  // Calculate distance from instance base to camera
-  vec3 worldBasePos = (modelMatrix * vec4(instanceOffset, 1.0)).xyz;
-  float distToCam = length(cameraPosition - worldBasePos);
+  // 9. Per-Instance Culling (Density-based random culling)
+  // Distance already calculated above for wind falloff, reuse it
   
-  // Culling parameters (from uniforms)
-  float cullDist = uCullRange.x; // Distance where grass starts to completely disappear
-  float cullFade = uCullRange.y; // Fade transition range
+  // 1. Calculate culling weight (0.0 = near, no culling, 1.0 = far, fully culled)
+  float cullWeight = smoothstep(uCullParams.x, uCullParams.y, dist);
   
-  // Calculate survival threshold: farther = lower survival rate
-  float survivalThreshold = smoothstep(cullDist - cullFade, cullDist, distToCam);
+  // 2. Random culling logic (using existing perBladeHash01)
+  // When cullWeight increases, more random values fall into the culling range
+  // This ensures each blade disappears at a different time, creating natural randomness
+  float isCulled = step(1.0 - cullWeight, perBladeHash01);
   
-  // Use perBladeHash01 to determine if this blade should be culled
-  // If random value is less than survival threshold, the blade is culled
-  float isCulled = step(perBladeHash01, survivalThreshold);
+  // 3. Smooth scaling disappearance (shrink before culling)
+  // Make blades about to be culled shrink first (e.g., within 0.1 range before culling threshold)
+  // This creates a smooth transition instead of instant disappearance
+  float shrinkGate = smoothstep(1.0 - cullWeight, 1.0 - cullWeight + 0.1, perBladeHash01);
   
-  // Density Compensation: when half the grass disappears, remaining grass should be wider
-  // This prevents the grass from looking too sparse visually
-  float widthBoost = 1.0 + survivalThreshold * 1.5; // Survivors at distance become 1.5x wider
+  // 4. Density Compensation
+  // As grass becomes sparse, we increase the width of remaining blades to compensate visual gaps
+  // uCullParams.z is recommended to be between 1.0 ~ 2.0
+  float densityCompensation = mix(1.0, uCullParams.z, cullWeight);
   
-  // Apply culling to presence
-  float finalPresence = presence * (1.0 - isCulled);
+  // 5. Combine culling and scaling for smooth disappearance
+  // Apply both culling (instant removal) and shrinking (smooth scale down) effects
+  float finalPresence = presence * (1.0 - isCulled) * (1.0 - shrinkGate);
   
-  // 9. Blade Geometry - Use shapeT for width calculation (maintains smooth tapering)
+  // 10. Blade Geometry - Use shapeT for width calculation (maintains smooth tapering)
   // This ensures the tip always has width = 0, even when vertices are folded
   float widthFactor = (shapeT + uBaseWidth) * pow(1.0 - shapeT, uTipThin);
-  vec3 lpos = spine + side * (width * widthBoost) * widthFactor * s * finalPresence;
+  
+  // Apply density compensation to width
+  vec3 lpos = spine + side * (width * densityCompensation) * widthFactor * s * finalPresence;
 
-  // 10. Apply Rotation
+  // 11. Apply Rotation
   lpos.xz = rotate2D(lpos.xz, facingAngle);
   tangent.xz = rotate2D(tangent.xz, facingAngle);
   side.xz = rotate2D(side.xz, facingAngle);
@@ -284,16 +304,16 @@ void main() {
   side = normalize(side);
   normal = normalize(normal);
 
-  // 11. Transform to World Space
+  // 12. Transform to World Space
   vec3 posObj = lpos + instanceOffset;
   vec3 posW = (modelMatrix * vec4(posObj, 1.0)).xyz;
 
-  // 12. View-dependent Tilt (use shapeT for tilt calculation to maintain smooth appearance)
+  // 13. View-dependent Tilt (use shapeT for tilt calculation to maintain smooth appearance)
   vec3 posObjTilted = applyViewDependentTilt(posObj, posW, tangent, side, normal, uv, shapeT);
   vec3 posWTilted = (modelMatrix * vec4(posObjTilted, 1.0)).xyz;
 
   // 13. Output
-  csm_Position = posObjTilted;
+  csm_Position = posWTilted;
 
   vN = -normal;
   vTangent = tangent;
@@ -302,8 +322,8 @@ void main() {
   vWorldPos = posWTilted;
   vTest = vec3(toCenter.x, toCenter.y, 0.0);
   vUv = uv;
-  vHeight = shapeT; // Use smooth shapeT for Fragment Shader to avoid visual artifacts
-  vType = bladeType;
+  vHeight = shapeT; 
+  vType = bladeType; 
   vPresence = presence;
   vClumpSeed = clumpSeed01;
   vBladeSeed = perBladeHash01;

@@ -5,7 +5,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import CustomShaderMaterial from 'three-custom-shader-material'
 import CustomShaderMaterialVanilla from 'three-custom-shader-material/vanilla'
 import utility from '@packages/r3f-gist/shaders/cginc/math/utility.glsl'
-import fractal from '@packages/r3f-gist/shaders/cginc/noise/fractal.glsl'
+import simplexNoise from '@packages/r3f-gist/shaders/cginc/noise/simplexNoise.glsl'
 import { GRID_SIZE, GRASS_BLADES } from './grass/constants'
 import { createGrassGeometry } from './grass/utils'
 import { useGrassCompute } from './grass/hooks/useGrassCompute'
@@ -14,10 +14,13 @@ import grassFragmentShader from './grass/shaders/grassFragment.glsl?raw'
 
 const grassVertex = /* glsl */ `
   ${utility}
-  ${fractal}
   ${grassVertexShader}
 `
-const grassFragment = grassFragmentShader
+const grassFragment = /* glsl */ `
+  ${utility}
+  ${simplexNoise}
+  ${grassFragmentShader}
+`
 
 export default function Grass() {
   const { scene } = useThree()
@@ -37,6 +40,7 @@ export default function Grass() {
     Clump: folder({
       clumpSize: { value: 0.8, min: 0.1, max: 5.0, step: 0.1 },
       clumpRadius: { value: 1.5, min: 0.3, max: 2.0, step: 0.1 },
+      typeTrendScale: { value: 0.1, min: 0.01, max: 1.0, step: 0.01 },
     }, { collapsed: true }),
     Angle: folder({
       centerYaw: { value: 1.0, min: 0.0, max: 3.0, step: 0.1 },
@@ -53,6 +57,8 @@ export default function Grass() {
       swayFreqMin: { value: 1.0, min: 0.1, max: 10.0, step: 0.1 },
       swayFreqMax: { value: 2.2, min: 0.1, max: 10.0, step: 0.1 },
       swayStrength: { value: 0.1, min: 0.0, max: 0.5, step: 0.001 },
+      windDistanceStart: { value: 10, min: 0, max: 100, step: 1, label: 'Wind Fade Start Distance' },
+      windDistanceEnd: { value: 30, min: 0, max: 200, step: 1, label: 'Wind Fade End Distance' },
     }, { collapsed: true }),
   }))
 
@@ -62,10 +68,11 @@ export default function Grass() {
     lodEnd: { value: 15, min: 0, max: 50, step: 1 },
   }))
 
-  // Culling controls
-  const [cullControls] = useControls('Grass.Culling', () => ({
-    cullDistance: { value: 25, min: 0, max: 50, step: 1 },
-    cullFade: { value: 5, min: 0, max: 50, step: 1 },
+  // Optimization controls (Culling & Density Compensation)
+  const [cullControls] = useControls('Grass.Optimization', () => ({
+    cullStart: { value: 15, min: 0, max: 200, step: 1, label: 'Cull Start Distance' },
+    cullEnd: { value: 20, min: 0, max: 300, step: 1, label: 'Cull End Distance' },
+    compensation: { value: 1.5, min: 1.0, max: 3.0, step: 0.1, label: 'Width Compensation' },
     groundColor: { value: '#1a3310' },
   }))
 
@@ -91,6 +98,12 @@ export default function Grass() {
       clumpInternalRange: { value: { x: 0.95, y: 1.05 }, step: 0.01, min: 0.5, max: 1.5 },
       clumpSeedRange: { value: { x: 0.9, y: 1.1 }, step: 0.01, min: 0.5, max: 1.5 },
       aoPower: { value: 2, min: 0.1, max: 5.0, step: 0.1 },
+    }, { collapsed: true }),
+    Noise: folder({
+      noiseFreqX: { value: 2.0, min: 0.1, max: 10.0, step: 0.1 },
+      noiseFreqY: { value: 2.0, min: 0.1, max: 10.0, step: 0.1 },
+      noiseRemapMin: { value: 0.5, min: 0.0, max: 1.0, step: 0.01 },
+      noiseRemapMax: { value: 1.0, min: 0.0, max: 1.0, step: 0.01 },
     }, { collapsed: true }),
   }))
 
@@ -132,11 +145,13 @@ export default function Grass() {
     uBladeYaw: computeParams.bladeYaw,
     uClumpYaw: computeParams.clumpYaw,
     uBladeRandomness: bladeRandomnessVec,
+    uTypeTrendScale: computeParams.typeTrendScale,
     uTime: 0.0, // Initial value, updated in useFrame
     uWindScale: computeParams.windScale,
     uWindSpeed: computeParams.windSpeed,
     uWindDir: windDirVec,
     uWindFacing: computeParams.windFacing,
+    uWindStrength: computeParams.windStrength,
   }), [computeParams, bladeRandomnessVec, windDirVec])
 
   const { bladeParamsRT, clumpDataRT, additionalDataRT, computeMaterial, compute } = useGrassCompute(computeConfig)
@@ -162,7 +177,6 @@ export default function Grass() {
     uGrassTextureSize: { value: new THREE.Vector2(GRID_SIZE, GRID_SIZE) },
     // Wind uniforms
     uTime: { value: 0 },
-    uWindStrength: { value: 0.35 }, // Still needed for scaling wind effects in vertex shader
     uWindDir: { value: new THREE.Vector2(1, 0) }, // Wind direction for sway direction
     uSwayFreqMin: { value: 1.0 }, // Minimum frequency for wind sway animation
     uSwayFreqMax: { value: 2.2 }, // Maximum frequency for wind sway animation
@@ -170,8 +184,10 @@ export default function Grass() {
     uBaseWidth: { value: 0.35 }, // Base width factor for blade geometry
     uTipThin: { value: 0.9 }, // Tip thinning factor for blade geometry
     uLODRange: { value: new THREE.Vector2(15, 40) }, // LOD range: x = start fold distance, y = full fold distance
-    uCullRange: { value: new THREE.Vector2(60, 20) }, // Culling range: x = cull distance, y = cull fade range
+    uCullParams: { value: new THREE.Vector3(40, 80, 1.5) }, // Culling params: x = cull start, y = cull end, z = width compensation
     uGroundColor: { value: new THREE.Vector3(0.1, 0.2, 0.05) }, // Ground surface color for material blending
+    uNoiseParams: { value: new THREE.Vector4(1.0, 3.0, 0.7, 1.0) }, // Noise params: x = freqX, y = freqY, z = remapMin, w = remapMax
+    uWindDistanceRange: { value: new THREE.Vector2(10, 30) }, // Wind distance falloff: x = start fade distance, y = end fade distance (farther = less wind)
     // Note: uWindSpeed is only used in compute shader for wind field translation
   }).current
 
@@ -231,19 +247,28 @@ export default function Grass() {
     uniforms.uAOPower.value = params.aoPower
 
     // Update wind uniforms
-    uniforms.uWindStrength.value = computeParams.windStrength
     uniforms.uWindDir.value.set(windDirVec.x, windDirVec.y)
     uniforms.uSwayFreqMin.value = computeParams.swayFreqMin
     uniforms.uSwayFreqMax.value = computeParams.swayFreqMax
     uniforms.uSwayStrength.value = computeParams.swayStrength
     uniforms.uBaseWidth.value = computeParams.baseWidth
     uniforms.uTipThin.value = computeParams.tipThin
+    uniforms.uWindDistanceRange.value.set(computeParams.windDistanceStart, computeParams.windDistanceEnd)
     // Note: uWindSpeed is only updated in compute shader
 
     // Update culling uniforms
-    uniforms.uCullRange.value.set(cullControls.cullDistance, cullControls.cullFade)
+    uniforms.uCullParams.value.set(cullControls.cullStart, cullControls.cullEnd, cullControls.compensation)
     const groundColorVec = new THREE.Color(cullControls.groundColor)
     uniforms.uGroundColor.value.set(groundColorVec.r, groundColorVec.g, groundColorVec.b)
+    
+    // Update noise uniforms
+    const noiseParams = renderingParams as any
+    uniforms.uNoiseParams.value.set(
+      noiseParams.noiseFreqX,
+      noiseParams.noiseFreqY,
+      noiseParams.noiseRemapMin,
+      noiseParams.noiseRemapMax
+    )
 
     // Trigger shadow material to recompile when uniforms change
     depthMat.needsUpdate = true

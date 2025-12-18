@@ -105,14 +105,14 @@ export default function App() {
             <CameraControls makeDefault />
             <Environment preset="city" environmentIntensity={0.2} />
             <DirectionalLightHelper />
-            {/* <Sky /> */}
+            <Sky />
             {/* <BasicMesh /> */}
             <Grass />
             {/* <NormalSphere /> */}
             <CanvasCapture />
             <Effects />
             <mesh receiveShadow rotation-x={-Math.PI / 2}>
-                <planeGeometry args={[10, 10]}  />
+                <planeGeometry args={[20, 20]}  />
                 <meshStandardMaterial color="#1a3310"/>
             </mesh>
 

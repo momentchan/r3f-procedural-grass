@@ -10,8 +10,9 @@ uniform vec2 uBladeSeedRange;  // min, max for blade seed color variation
 uniform vec2 uClumpInternalRange;  // min, max for clump internal color variation
 uniform vec2 uClumpSeedRange;  // min, max for clump seed color variation
 uniform float uAOPower;  // power exponent for AO curve
-uniform vec2 uCullRange; // x: cull distance, y: cull fade range (for material blending)
+uniform vec3 uCullParams; // x: cull start distance, y: cull end distance, z: width compensation (for material blending)
 uniform vec3 uGroundColor; // Ground surface color for material blending
+uniform vec4 uNoiseParams; // x: freqX, y: freqY, z: remapMin, w: remapMax
 
 varying float vHeight;
 varying vec2 vUv;
@@ -24,6 +25,7 @@ varying vec2 vToCenter;
 varying vec3 vWorldPos;
 varying float vClumpSeed;
 varying float vBladeSeed;
+varying float vType;
 
 // ============================================================================
 // Lighting Normal Computation (Ghost-style)
@@ -50,7 +52,7 @@ vec3 computeLightingNormal(
   
   // Material blending: fade to ground normal at distance (visual denoising)
   // This makes distant grass blend better with the ground
-  float mixToGround = smoothstep(uCullRange.x - uCullRange.y, uCullRange.x, dist);
+  float mixToGround = smoothstep(uCullParams.x, uCullParams.y, dist);
   vec3 groundNormal = vec3(0.0, 1.0, 0.0);
   
   return normalize(mix(blendedNormal, groundNormal, mixToGround));
@@ -109,7 +111,7 @@ void main() {
   // --------------------------------------------------------------------------
   // 6. Height-based AO (must multiply) - Ghost shape source
   // --------------------------------------------------------------------------
-  float ao = mix(0.35, 1.0, pow(vHeight, uAOPower));
+  float ao = mix(0.35, 1.0, clamp(pow(vHeight, uAOPower), 0.0, 1.0));
   color *= ao;
 
   // --------------------------------------------------------------------------
@@ -123,7 +125,7 @@ void main() {
   
   // Material Blending: fade to ground color at distance (visual denoising)
   // This makes distant grass blend better with the ground surface
-  float mixToGroundColor = smoothstep(uCullRange.x - uCullRange.y, uCullRange.x, dist);
+  float mixToGroundColor = smoothstep(uCullParams.x, uCullParams.y, dist);
   color = mix(color, uGroundColor, mixToGroundColor * 0.5);
 
   // --------------------------------------------------------------------------
@@ -144,6 +146,13 @@ void main() {
 
   vec3 trans = uLightColor * backLight * uBackLightStrength;
   color += trans;
+
+  float noise = remap(
+    simplexNoise2d(vUv * uNoiseParams.xy + vec2(vBladeSeed, vClumpSeed)), 
+    vec2(-1.0, 1.0), 
+    uNoiseParams.zw
+  );
+  color *= noise;
 
   csm_DiffuseColor = vec4(color, 1.0);
 }
