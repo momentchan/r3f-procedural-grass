@@ -3,31 +3,37 @@
 // ============================================================================
 attribute vec3 instanceOffset;
 attribute float instanceId;
-uniform sampler2D uBladeParamsTexture;
-uniform sampler2D uClumpDataTexture;
-uniform sampler2D uMotionSeedsTexture;
-uniform vec2 uGrassTextureSize;
 
-uniform float thicknessStrength;
-uniform float uTime;
+// Texture Uniforms
+uniform sampler2D uTextureBladeParams;
+uniform sampler2D uTextureClumpData;
+uniform sampler2D uTextureMotionSeeds;
+uniform vec2 uTextureGrassSize;
+
+// Geometry Uniforms
+uniform float uGeometryThicknessStrength;
+uniform float uGeometryBaseWidth;
+uniform float uGeometryTipThin;
+
+// Wind Uniforms
+uniform float uWindTime;
 uniform vec2 uWindDir;
-uniform float uSwayFreqMin;
-uniform float uSwayFreqMax;
-uniform float uSwayStrength;
-uniform float uBaseWidth;
-uniform float uTipThin;
-uniform vec2 uLODRange; // x: start fold distance, y: full fold distance
-uniform vec3 uCullParams; // x: cull start distance, y: cull end distance, z: width compensation strength
-uniform vec2 uWindDistanceRange; // x: wind start fade distance, y: wind end fade distance (farther = less wind)
+uniform float uWindSwayFreqMin;
+uniform float uWindSwayFreqMax;
+uniform float uWindSwayStrength;
+uniform vec2 uWindDistanceRange;
+
+// LOD Uniforms
+uniform vec2 uLODRange;
+
+// Cull Uniforms
+uniform vec3 uCullParams;
 
 // ============================================================================
 // Varyings
 // ============================================================================
 varying float vHeight;
 varying vec2 vUv;
-varying float vType;
-varying float vPresence;
-varying vec3 vTest;
 varying vec3 vN;
 varying vec3 vTangent;
 varying vec3 vSide;
@@ -89,24 +95,24 @@ void applyWindSway(
 
   // Gust envelope (slow breathing)
   float seed = mod(perBladeHash01 * 3.567, 1.0); 
-  float gust = 0.65 + 0.35 * sin(uTime * 0.35 + seed * 6.28318);
+  float gust = 0.65 + 0.35 * sin(uWindTime * 0.35 + seed * 6.28318);
 
   // Traveling wave along wind direction (big-scale flow)
   float wave = dot(worldXZ, windDir2) * 0.15; // 0.10~0.25 usually good
 
   // Per-blade frequency variation: mix between min and max based on hash
-  float baseFreq = mix(uSwayFreqMin, uSwayFreqMax, seed);
+  float baseFreq = mix(uWindSwayFreqMin, uWindSwayFreqMax, seed);
   float phase = perBladeHash01 * 6.28318 + wave;
 
   // Low freq (main sway) + high freq (small flutter)
-  float low  = sin(uTime * baseFreq + phase + t * 2.2);
-  float high = sin(uTime * (baseFreq * 5.0) + phase * 1.7 + t * 5.0);
+  float low  = sin(uWindTime * baseFreq + phase + t * 2.2);
+  float high = sin(uWindTime * (baseFreq * 5.0) + phase * 1.7 + t * 5.0);
 
   // Amplitude: keep it small. (your old 2.2 is the reason it's jelly)
   // windStrength already has uWindStrength applied from compute shader
   float amp = height * windStrength;
-  float swayLow  = amp * gust * uSwayStrength;  // main motion
-  float swayHigh = amp * 0.8 * uSwayStrength;         // small detail
+  float swayLow  = amp * gust * uWindSwayStrength;  // main motion
+  float swayHigh = amp * 0.8 * uWindSwayStrength;         // small detail
 
   // Direction blend: mostly wind, a bit cross wind driven by high component
   vec3 dir = normalize(W + CW * (high * 0.35));
@@ -141,7 +147,7 @@ vec3 applyViewDependentTilt(
   float centerMask = pow(1.0 - t, 0.5) * pow(t + 0.05, 0.33);
   centerMask = clamp(centerMask, 0.0, 1.0);
   
-  float tilt = thicknessStrength * edgeMask * centerMask;
+  float tilt = uGeometryThicknessStrength * edgeMask * centerMask;
   vec3 nXZ = normalize(normal * vec3(1.0, 0.0, 1.0));
   return posObj + nXZ * tilt;
 }
@@ -206,14 +212,14 @@ void main() {
   float positionT = calculateLODPositionT(shapeT, instanceOffset);
 
   // 2. Texture Coordinates
-  int ix = int(mod(instanceId, uGrassTextureSize.x));
-  int iy = int(floor(instanceId / uGrassTextureSize.x));
+  int ix = int(mod(instanceId, uTextureGrassSize.x));
+  int iy = int(floor(instanceId / uTextureGrassSize.x));
   ivec2 texelCoord = ivec2(ix, iy);
 
   // 3. Read Precomputed Data
-  vec4 bladeParams = texelFetch(uBladeParamsTexture, texelCoord, 0);
-  vec4 clumpData = texelFetch(uClumpDataTexture, texelCoord, 0);
-  vec4 motionSeeds = texelFetch(uMotionSeedsTexture, texelCoord, 0);
+  vec4 bladeParams = texelFetch(uTextureBladeParams, texelCoord, 0);
+  vec4 clumpData = texelFetch(uTextureClumpData, texelCoord, 0);
+  vec4 motionSeeds = texelFetch(uTextureMotionSeeds, texelCoord, 0);
   
   float height = bladeParams.x;
   float width = bladeParams.y;
@@ -290,7 +296,7 @@ void main() {
   
   // 10. Blade Geometry - Use shapeT for width calculation (maintains smooth tapering)
   // This ensures the tip always has width = 0, even when vertices are folded
-  float widthFactor = (shapeT + uBaseWidth) * pow(1.0 - shapeT, uTipThin);
+  float widthFactor = (shapeT + uGeometryBaseWidth) * pow(1.0 - shapeT, uGeometryTipThin);
   
   // Apply density compensation to width
   vec3 lpos = spine + side * (width * densityCompensation) * widthFactor * s * finalPresence;
@@ -320,11 +326,8 @@ void main() {
   vSide = side;
   vToCenter = toCenter;
   vWorldPos = posWTilted;
-  vTest = vec3(toCenter.x, toCenter.y, 0.0);
   vUv = uv;
   vHeight = shapeT; 
-  vType = bladeType; 
-  vPresence = presence;
   vClumpSeed = clumpSeed01;
   vBladeSeed = perBladeHash01;
 }

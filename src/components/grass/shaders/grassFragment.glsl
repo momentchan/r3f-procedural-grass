@@ -1,23 +1,30 @@
-uniform vec3 baseColor;
-uniform vec3 tipColor;
+// ============================================================================
+// Color Uniforms
+// ============================================================================
+uniform vec3 uBaseColor;
+uniform vec3 uTipColor;
+uniform vec2 uBladeSeedRange;
+uniform vec2 uClumpInternalRange;
+uniform vec2 uClumpSeedRange;
+uniform float uAOPower;
+uniform vec3 uGroundColor;
+uniform vec4 uNoiseParams;
+
+// Normal Uniforms
 uniform float uMidSoft;
 uniform float uRimPos;
 uniform float uRimSoft;
+
+// Lighting Uniforms
 uniform vec3 uLightDirection;
 uniform vec3 uLightColor;
-uniform float uBackLightStrength;
-uniform vec2 uBladeSeedRange;  // min, max for blade seed color variation
-uniform vec2 uClumpInternalRange;  // min, max for clump internal color variation
-uniform vec2 uClumpSeedRange;  // min, max for clump seed color variation
-uniform float uAOPower;  // power exponent for AO curve
-uniform vec3 uCullParams; // x: cull start distance, y: cull end distance, z: width compensation (for material blending)
-uniform vec3 uGroundColor; // Ground surface color for material blending
-uniform vec4 uNoiseParams; // x: freqX, y: freqY, z: remapMin, w: remapMax
+uniform float uLightBackStrength;
+
+// Cull Uniforms
+uniform vec3 uCullParams;
 
 varying float vHeight;
 varying vec2 vUv;
-varying float vPresence;
-varying vec3 vTest;
 varying vec3 vN;
 varying vec3 vTangent;
 varying vec3 vSide;
@@ -25,7 +32,6 @@ varying vec2 vToCenter;
 varying vec3 vWorldPos;
 varying float vClumpSeed;
 varying float vBladeSeed;
-varying float vType;
 
 // ============================================================================
 // Lighting Normal Computation (Ghost-style)
@@ -98,7 +104,7 @@ void main() {
   // --------------------------------------------------------------------------
   // 4. Base Color (Height Gradient)
   // --------------------------------------------------------------------------
-  vec3 color = mix(baseColor, tipColor, vHeight);
+  vec3 color = mix(uBaseColor, uTipColor, vHeight);
 
   // --------------------------------------------------------------------------
   // 5. Ghost-style Color Layering (three layers)
@@ -144,7 +150,7 @@ void main() {
   float thickness = pow(1.0 - vHeight, 1.3);
   float backLight = backNdL * viewGrazing * thickness;
 
-  vec3 trans = uLightColor * backLight * uBackLightStrength;
+  vec3 trans = uLightColor * backLight * uLightBackStrength;
   color += trans;
 
   float noise = remap(

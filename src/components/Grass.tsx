@@ -25,85 +25,81 @@ const grassFragment = /* glsl */ `
 export default function Grass() {
   const { scene } = useThree()
 
-  const [computeParams] = useControls('Grass.Compute', () => ({
-    Shape: folder({
-      bladeHeightMin: { value: 0.4, min: 0.1, max: 2.0, step: 0.1 },
-      bladeHeightMax: { value: 0.8, min: 0.1, max: 2.0, step: 0.1 },
-      bladeWidthMin: { value: 0.01, min: 0.01, max: 0.1, step: 0.001 },
-      bladeWidthMax: { value: 0.05, min: 0.01, max: 0.1, step: 0.001 },
-      bendAmountMin: { value: 0.2, min: 0.0, max: 1.0, step: 0.1 },
-      bendAmountMax: { value: 0.6, min: 0.0, max: 1.0, step: 0.1 },
-      bladeRandomness: { value: { x: 0.3, y: 0.3, z: 0.2 }, step: 0.01, min: 0.0, max: 1.0 },
-      baseWidth: { value: 0.35, min: 0.0, max: 1.0, step: 0.01 },
-      tipThin: { value: 0.9, min: 0.0, max: 2.0, step: 0.01 },
-    }, { collapsed: true }),
-    Clump: folder({
-      clumpSize: { value: 0.8, min: 0.1, max: 5.0, step: 0.1 },
-      clumpRadius: { value: 1.5, min: 0.3, max: 2.0, step: 0.1 },
-      typeTrendScale: { value: 0.1, min: 0.01, max: 1.0, step: 0.01 },
-    }, { collapsed: true }),
-    Angle: folder({
-      centerYaw: { value: 1.0, min: 0.0, max: 3.0, step: 0.1 },
-      bladeYaw: { value: 1.2, min: 0.0, max: 3.0, step: 0.1 },
-      clumpYaw: { value: 0.5, min: 0.0, max: 2.0, step: 0.1 },
-    }, { collapsed: true }),
-    Wind: folder({
-      windDirX: { value: 1, min: -1, max: 1, step: 0.01 },
-      windDirZ: { value: 0, min: -1, max: 1, step: 0.01 },
-      windSpeed: { value: 0.6, min: 0, max: 3, step: 0.01 },
-      windStrength: { value: 0.35, min: 0, max: 2, step: 0.01 },
-      windScale: { value: 0.25, min: 0.01, max: 2, step: 0.01 },
-      windFacing: { value: 0.6, min: 0.0, max: 1.0, step: 0.01 },
-      swayFreqMin: { value: 1.0, min: 0.1, max: 10.0, step: 0.1 },
-      swayFreqMax: { value: 2.2, min: 0.1, max: 10.0, step: 0.1 },
-      swayStrength: { value: 0.1, min: 0.0, max: 0.5, step: 0.001 },
-      windDistanceStart: { value: 10, min: 0, max: 100, step: 1, label: 'Wind Fade Start Distance' },
-      windDistanceEnd: { value: 30, min: 0, max: 200, step: 1, label: 'Wind Fade End Distance' },
-    }, { collapsed: true }),
-  }))
-
-  // LOD controls
-  const [lodControls] = useControls('Grass.LOD', () => ({
-    lodStart: { value: 5, min: 0, max: 50, step: 1 },
-    lodEnd: { value: 15, min: 0, max: 50, step: 1 },
-  }))
-
-  // Optimization controls (Culling & Density Compensation)
-  const [cullControls] = useControls('Grass.Optimization', () => ({
-    cullStart: { value: 15, min: 0, max: 200, step: 1, label: 'Cull Start Distance' },
-    cullEnd: { value: 20, min: 0, max: 300, step: 1, label: 'Cull End Distance' },
-    compensation: { value: 1.5, min: 1.0, max: 3.0, step: 0.1, label: 'Width Compensation' },
-    groundColor: { value: '#1a3310' },
-  }))
-
-  // Vertex/Fragment shader parameters
-  const [renderingParams] = useControls('Grass.Rendering', () => ({
+  const [geometryParams] = useControls('Grass', () => ({
     Geometry: folder({
-      thicknessStrength: { value: 0.02, min: 0.0, max: 0.1, step: 0.001 },
+      Shape: folder({
+        bladeHeightMin: { value: 0.4, min: 0.1, max: 2.0, step: 0.1 },
+        bladeHeightMax: { value: 0.8, min: 0.1, max: 2.0, step: 0.1 },
+        bladeWidthMin: { value: 0.01, min: 0.01, max: 0.1, step: 0.001 },
+        bladeWidthMax: { value: 0.05, min: 0.01, max: 0.1, step: 0.001 },
+        bendAmountMin: { value: 0.2, min: 0.0, max: 1.0, step: 0.1 },
+        bendAmountMax: { value: 0.6, min: 0.0, max: 1.0, step: 0.1 },
+        bladeRandomness: { value: { x: 0.3, y: 0.3, z: 0.2 }, step: 0.01, min: 0.0, max: 1.0 },
+        baseWidth: { value: 0.35, min: 0.0, max: 1.0, step: 0.01 },
+        tipThin: { value: 0.9, min: 0.0, max: 2.0, step: 0.01 },
+        thicknessStrength: { value: 0.02, min: 0.0, max: 0.1, step: 0.001 },
+      }, { collapsed: true }),
+      Clump: folder({
+        clumpSize: { value: 0.8, min: 0.1, max: 5.0, step: 0.1 },
+        clumpRadius: { value: 1.5, min: 0.3, max: 2.0, step: 0.1 },
+        typeTrendScale: { value: 0.1, min: 0.01, max: 1.0, step: 0.01 },
+      }, { collapsed: true }),
+      Angle: folder({
+        centerYaw: { value: 1.0, min: 0.0, max: 3.0, step: 0.1 },
+        bladeYaw: { value: 1.2, min: 0.0, max: 3.0, step: 0.1 },
+        clumpYaw: { value: 0.5, min: 0.0, max: 2.0, step: 0.1 },
+      }, { collapsed: true }),
     }, { collapsed: true }),
-    Color: folder({
-      baseColor: { value: '#213110' },
-      tipColor: { value: '#3e8d2f' },
+    Appearance: folder({
+      Color: folder({
+        baseColor: { value: '#213110' },
+        tipColor: { value: '#3e8d2f' },
+        groundColor: { value: '#1a3310' },
+        bladeSeedRange: { value: { x: 0.95, y: 1.03 }, step: 0.01, min: 0.5, max: 1.5 },
+        clumpInternalRange: { value: { x: 0.95, y: 1.05 }, step: 0.01, min: 0.5, max: 1.5 },
+        clumpSeedRange: { value: { x: 0.9, y: 1.1 }, step: 0.01, min: 0.5, max: 1.5 },
+        aoPower: { value: 5, min: 0.1, max: 5.0, step: 0.1 },
+      }, { collapsed: true }),
+      Normal: folder({
+        midSoft: { value: 0.25, min: 0.0, max: 1.0, step: 0.01 },
+        rimPos: { value: 0.42, min: 0.0, max: 1.0, step: 0.01 },
+        rimSoft: { value: 0.03, min: 0.0, max: 0.1, step: 0.001 },
+      }, { collapsed: true }),
+      Lighting: folder({
+        backLightStrength: { value: 0.2, min: 0.0, max: 2.0, step: 0.1 },
+      }, { collapsed: true }),
+      Noise: folder({
+        noiseFreqX: { value: 5, min: 0.1, max: 10.0, step: 0.1 },
+        noiseFreqY: { value: 10, min: 0.1, max: 10.0, step: 0.1 },
+        noiseRemapMin: { value: 0.7, min: 0.0, max: 1.0, step: 0.01 },
+        noiseRemapMax: { value: 1.0, min: 0.0, max: 1.0, step: 0.01 },
+      }, { collapsed: true }),
     }, { collapsed: true }),
-    Normal: folder({
-      midSoft: { value: 0.25, min: 0.0, max: 1.0, step: 0.01 },
-      rimPos: { value: 0.42, min: 0.0, max: 1.0, step: 0.01 },
-      rimSoft: { value: 0.03, min: 0.0, max: 0.1, step: 0.001 },
+    Animation: folder({
+      Wind: folder({
+        windDirX: { value: 1, min: -1, max: 1, step: 0.01 },
+        windDirZ: { value: 0, min: -1, max: 1, step: 0.01 },
+        windSpeed: { value: 0.6, min: 0, max: 3, step: 0.01 },
+        windStrength: { value: 0.35, min: 0, max: 2, step: 0.01 },
+        windScale: { value: 0.25, min: 0.01, max: 2, step: 0.01 },
+        windFacing: { value: 0.6, min: 0.0, max: 1.0, step: 0.01 },
+        swayFreqMin: { value: 0.4, min: 0.1, max: 10.0, step: 0.1 },
+        swayFreqMax: { value: 1.5, min: 0.1, max: 10.0, step: 0.1 },
+        swayStrength: { value: 0.1, min: 0.0, max: 0.5, step: 0.001 },
+        windDistanceStart: { value: 10, min: 0, max: 100, step: 1 },
+        windDistanceEnd: { value: 30, min: 0, max: 200, step: 1 },
+      }, { collapsed: true }),
     }, { collapsed: true }),
-    Lighting: folder({
-      backLightStrength: { value: 0.2, min: 0.0, max: 2.0, step: 0.1 },
-    }, { collapsed: true }),
-    ColorVariation: folder({
-      bladeSeedRange: { value: { x: 0.95, y: 1.03 }, step: 0.01, min: 0.5, max: 1.5 },
-      clumpInternalRange: { value: { x: 0.95, y: 1.05 }, step: 0.01, min: 0.5, max: 1.5 },
-      clumpSeedRange: { value: { x: 0.9, y: 1.1 }, step: 0.01, min: 0.5, max: 1.5 },
-      aoPower: { value: 2, min: 0.1, max: 5.0, step: 0.1 },
-    }, { collapsed: true }),
-    Noise: folder({
-      noiseFreqX: { value: 2.0, min: 0.1, max: 10.0, step: 0.1 },
-      noiseFreqY: { value: 2.0, min: 0.1, max: 10.0, step: 0.1 },
-      noiseRemapMin: { value: 0.5, min: 0.0, max: 1.0, step: 0.01 },
-      noiseRemapMax: { value: 1.0, min: 0.0, max: 1.0, step: 0.01 },
+    Performance: folder({
+      LOD: folder({
+        lodStart: { value: 5, min: 0, max: 50, step: 1 },
+        lodEnd: { value: 15, min: 0, max: 50, step: 1 },
+      }, { collapsed: true }),
+      Culling: folder({
+        cullStart: { value: 15, min: 0, max: 200, step: 1 },
+        cullEnd: { value: 30, min: 0, max: 300, step: 1 },
+        compensation: { value: 1.5, min: 1.0, max: 3.0, step: 0.1 },
+      }, { collapsed: true }),
     }, { collapsed: true }),
   }))
 
@@ -114,7 +110,7 @@ export default function Grass() {
   const materialControls = useControls('Grass.Material', {
     roughness: { value: 0.3, min: 0.0, max: 1.0, step: 0.01 },
     metalness: { value: 0.5, min: 0.0, max: 1.0, step: 0.01 },
-    emissive: { value: '#000000', label: 'Emissive Color' },
+    emissive: { value: '#000000' },
     emissiveIntensity: { value: 0.0, min: 0.0, max: 2.0, step: 0.1 },
     envMapIntensity: { value: 1.0, min: 0.0, max: 3.0, step: 0.1 },
   })
@@ -122,80 +118,86 @@ export default function Grass() {
   const emissiveColor = useMemo(() => new THREE.Color(materialControls.emissive as any), [materialControls.emissive])
 
   // Use grass compute hook for Multiple Render Targets (before uniforms definition)
+  const params = geometryParams as any
   const bladeRandomnessVec = useMemo(() => {
-    const r = computeParams.bladeRandomness as any
+    const r = params.bladeRandomness
     return new THREE.Vector3(r.x, r.y, r.z)
-  }, [computeParams.bladeRandomness])
+  }, [params.bladeRandomness])
 
   const windDirVec = useMemo(() => {
-    const dir = new THREE.Vector2(computeParams.windDirX, computeParams.windDirZ).normalize()
+    const dir = new THREE.Vector2(params.windDirX, params.windDirZ).normalize()
     return dir
-  }, [computeParams.windDirX, computeParams.windDirZ])
+  }, [params.windDirX, params.windDirZ])
 
   const computeConfig = useMemo(() => ({
-    bladeHeightMin: computeParams.bladeHeightMin,
-    bladeHeightMax: computeParams.bladeHeightMax,
-    bladeWidthMin: computeParams.bladeWidthMin,
-    bladeWidthMax: computeParams.bladeWidthMax,
-    bendAmountMin: computeParams.bendAmountMin,
-    bendAmountMax: computeParams.bendAmountMax,
-    clumpSize: computeParams.clumpSize,
-    clumpRadius: computeParams.clumpRadius,
-    uCenterYaw: computeParams.centerYaw,
-    uBladeYaw: computeParams.bladeYaw,
-    uClumpYaw: computeParams.clumpYaw,
+    bladeHeightMin: params.bladeHeightMin,
+    bladeHeightMax: params.bladeHeightMax,
+    bladeWidthMin: params.bladeWidthMin,
+    bladeWidthMax: params.bladeWidthMax,
+    bendAmountMin: params.bendAmountMin,
+    bendAmountMax: params.bendAmountMax,
+    clumpSize: params.clumpSize,
+    clumpRadius: params.clumpRadius,
+    uCenterYaw: params.centerYaw,
+    uBladeYaw: params.bladeYaw,
+    uClumpYaw: params.clumpYaw,
     uBladeRandomness: bladeRandomnessVec,
-    uTypeTrendScale: computeParams.typeTrendScale,
+    uTypeTrendScale: params.typeTrendScale,
     uTime: 0.0, // Initial value, updated in useFrame
-    uWindScale: computeParams.windScale,
-    uWindSpeed: computeParams.windSpeed,
+    uWindScale: params.windScale,
+    uWindSpeed: params.windSpeed,
     uWindDir: windDirVec,
-    uWindFacing: computeParams.windFacing,
-    uWindStrength: computeParams.windStrength,
-  }), [computeParams, bladeRandomnessVec, windDirVec])
+    uWindFacing: params.windFacing,
+    uWindStrength: params.windStrength,
+  }), [params, bladeRandomnessVec, windDirVec])
 
   const { bladeParamsRT, clumpDataRT, additionalDataRT, computeMaterial, compute } = useGrassCompute(computeConfig)
 
   const uniforms = useRef({
-    thicknessStrength: { value: 0.02 },
-    baseColor: { value: new THREE.Vector3(0.18, 0.35, 0.12) },
-    tipColor: { value: new THREE.Vector3(0.35, 0.65, 0.28) },
-    uMidSoft: { value: 0.2 },
-    uRimPos: { value: 0.42 },
-    uRimSoft: { value: 0.2 },
-    uLightDirection: { value: new THREE.Vector3(0, 0, -1) },
-    uLightColor: { value: new THREE.Vector3(1, 1, 1) },
-    uBackLightStrength: { value: 0.6 },
+    // Texture Uniforms
+    uTextureBladeParams: { value: bladeParamsRT.texture },
+    uTextureClumpData: { value: clumpDataRT.texture },
+    uTextureMotionSeeds: { value: additionalDataRT.texture },
+    uTextureGrassSize: { value: new THREE.Vector2(GRID_SIZE, GRID_SIZE) },
+    // Geometry Uniforms
+    uGeometryThicknessStrength: { value: 0.02 },
+    uGeometryBaseWidth: { value: 0.35 },
+    uGeometryTipThin: { value: 0.9 },
+    // Wind Uniforms
+    uWindTime: { value: 0 },
+    uWindDir: { value: new THREE.Vector2(1, 0) },
+    uWindSwayFreqMin: { value: 1.0 },
+    uWindSwayFreqMax: { value: 2.2 },
+    uWindSwayStrength: { value: 1.0 },
+    uWindDistanceRange: { value: new THREE.Vector2(10, 30) },
+    // Color Uniforms
+    uBaseColor: { value: new THREE.Vector3(0.18, 0.35, 0.12) },
+    uTipColor: { value: new THREE.Vector3(0.35, 0.65, 0.28) },
     uBladeSeedRange: { value: new THREE.Vector2(0.95, 1.03) },
     uClumpInternalRange: { value: new THREE.Vector2(0.95, 1.05) },
     uClumpSeedRange: { value: new THREE.Vector2(0.9, 1.1) },
     uAOPower: { value: 0.6 },
-    // Multiple render target textures
-    uBladeParamsTexture: { value: bladeParamsRT.texture },
-    uClumpDataTexture: { value: clumpDataRT.texture },
-    uMotionSeedsTexture: { value: additionalDataRT.texture },
-    uGrassTextureSize: { value: new THREE.Vector2(GRID_SIZE, GRID_SIZE) },
-    // Wind uniforms
-    uTime: { value: 0 },
-    uWindDir: { value: new THREE.Vector2(1, 0) }, // Wind direction for sway direction
-    uSwayFreqMin: { value: 1.0 }, // Minimum frequency for wind sway animation
-    uSwayFreqMax: { value: 2.2 }, // Maximum frequency for wind sway animation
-    uSwayStrength: { value: 1.0 }, // Sway strength multiplier for wind animation
-    uBaseWidth: { value: 0.35 }, // Base width factor for blade geometry
-    uTipThin: { value: 0.9 }, // Tip thinning factor for blade geometry
-    uLODRange: { value: new THREE.Vector2(15, 40) }, // LOD range: x = start fold distance, y = full fold distance
-    uCullParams: { value: new THREE.Vector3(40, 80, 1.5) }, // Culling params: x = cull start, y = cull end, z = width compensation
-    uGroundColor: { value: new THREE.Vector3(0.1, 0.2, 0.05) }, // Ground surface color for material blending
-    uNoiseParams: { value: new THREE.Vector4(1.0, 3.0, 0.7, 1.0) }, // Noise params: x = freqX, y = freqY, z = remapMin, w = remapMax
-    uWindDistanceRange: { value: new THREE.Vector2(10, 30) }, // Wind distance falloff: x = start fade distance, y = end fade distance (farther = less wind)
-    // Note: uWindSpeed is only used in compute shader for wind field translation
+    uGroundColor: { value: new THREE.Vector3(0.1, 0.2, 0.05) },
+    uNoiseParams: { value: new THREE.Vector4(1.0, 3.0, 0.7, 1.0) },
+    // Normal Uniforms
+    uMidSoft: { value: 0.2 },
+    uRimPos: { value: 0.42 },
+    uRimSoft: { value: 0.2 },
+    // Lighting Uniforms
+    uLightDirection: { value: new THREE.Vector3(0, 0, -1) },
+    uLightColor: { value: new THREE.Vector3(1, 1, 1) },
+    uLightBackStrength: { value: 0.6 },
+    // LOD Uniforms
+    uLODRange: { value: new THREE.Vector2(15, 40) },
+    // Cull Uniforms
+    uCullParams: { value: new THREE.Vector3(40, 80, 1.5) },
   }).current
 
   // Update texture uniforms when render targets change
   useEffect(() => {
-    uniforms.uBladeParamsTexture.value = bladeParamsRT.texture
-    uniforms.uClumpDataTexture.value = clumpDataRT.texture
-    uniforms.uMotionSeedsTexture.value = additionalDataRT.texture
+    uniforms.uTextureBladeParams.value = bladeParamsRT.texture
+    uniforms.uTextureClumpData.value = clumpDataRT.texture
+    uniforms.uTextureMotionSeeds.value = additionalDataRT.texture
   }, [bladeParamsRT.texture, clumpDataRT.texture, additionalDataRT.texture, uniforms])
 
   // Create depth material for directional/spot light shadows
@@ -216,63 +218,56 @@ export default function Grass() {
   }, [uniforms])
 
   useEffect(() => {
-    const params = renderingParams as any
-    
-    uniforms.thicknessStrength.value = params.thicknessStrength
+    const p = geometryParams as any
 
-    // Convert Leva color (string or object) to Vector3
-    const baseColorVec = new THREE.Color(params.baseColor)
-    uniforms.baseColor.value.set(baseColorVec.r, baseColorVec.g, baseColorVec.b)
+    // Update geometry uniforms
+    uniforms.uGeometryThicknessStrength.value = p.thicknessStrength
+    uniforms.uGeometryBaseWidth.value = p.baseWidth
+    uniforms.uGeometryTipThin.value = p.tipThin
 
-    const tipColorVec = new THREE.Color(params.tipColor)
-    uniforms.tipColor.value.set(tipColorVec.r, tipColorVec.g, tipColorVec.b)
+    // Update color uniforms
+    const baseColorVec = new THREE.Color(p.baseColor)
+    uniforms.uBaseColor.value.set(baseColorVec.r, baseColorVec.g, baseColorVec.b)
 
-    // Update rim and midrib parameters
-    uniforms.uMidSoft.value = params.midSoft
-    uniforms.uRimPos.value = params.rimPos
-    uniforms.uRimSoft.value = params.rimSoft
-    uniforms.uBackLightStrength.value = params.backLightStrength
-    
-    // Update color layer ranges
-    const bladeSeedRange = params.bladeSeedRange
-    uniforms.uBladeSeedRange.value.set(bladeSeedRange.x, bladeSeedRange.y)
-    
-    const clumpInternalRange = params.clumpInternalRange
-    uniforms.uClumpInternalRange.value.set(clumpInternalRange.x, clumpInternalRange.y)
-    
-    const clumpSeedRange = params.clumpSeedRange
-    uniforms.uClumpSeedRange.value.set(clumpSeedRange.x, clumpSeedRange.y)
-    
-    // Update AO power
-    uniforms.uAOPower.value = params.aoPower
+    const tipColorVec = new THREE.Color(p.tipColor)
+    uniforms.uTipColor.value.set(tipColorVec.r, tipColorVec.g, tipColorVec.b)
+
+    uniforms.uBladeSeedRange.value.set(p.bladeSeedRange.x, p.bladeSeedRange.y)
+    uniforms.uClumpInternalRange.value.set(p.clumpInternalRange.x, p.clumpInternalRange.y)
+    uniforms.uClumpSeedRange.value.set(p.clumpSeedRange.x, p.clumpSeedRange.y)
+    uniforms.uAOPower.value = p.aoPower
+
+    const groundColorVec = new THREE.Color(p.groundColor)
+    uniforms.uGroundColor.value.set(groundColorVec.r, groundColorVec.g, groundColorVec.b)
+
+    uniforms.uNoiseParams.value.set(
+      p.noiseFreqX,
+      p.noiseFreqY,
+      p.noiseRemapMin,
+      p.noiseRemapMax
+    )
+
+    // Update normal uniforms
+    uniforms.uMidSoft.value = p.midSoft
+    uniforms.uRimPos.value = p.rimPos
+    uniforms.uRimSoft.value = p.rimSoft
+
+    // Update lighting uniforms
+    uniforms.uLightBackStrength.value = p.backLightStrength
 
     // Update wind uniforms
     uniforms.uWindDir.value.set(windDirVec.x, windDirVec.y)
-    uniforms.uSwayFreqMin.value = computeParams.swayFreqMin
-    uniforms.uSwayFreqMax.value = computeParams.swayFreqMax
-    uniforms.uSwayStrength.value = computeParams.swayStrength
-    uniforms.uBaseWidth.value = computeParams.baseWidth
-    uniforms.uTipThin.value = computeParams.tipThin
-    uniforms.uWindDistanceRange.value.set(computeParams.windDistanceStart, computeParams.windDistanceEnd)
-    // Note: uWindSpeed is only updated in compute shader
+    uniforms.uWindSwayFreqMin.value = p.swayFreqMin
+    uniforms.uWindSwayFreqMax.value = p.swayFreqMax
+    uniforms.uWindSwayStrength.value = p.swayStrength
+    uniforms.uWindDistanceRange.value.set(p.windDistanceStart, p.windDistanceEnd)
 
     // Update culling uniforms
-    uniforms.uCullParams.value.set(cullControls.cullStart, cullControls.cullEnd, cullControls.compensation)
-    const groundColorVec = new THREE.Color(cullControls.groundColor)
-    uniforms.uGroundColor.value.set(groundColorVec.r, groundColorVec.g, groundColorVec.b)
-    
-    // Update noise uniforms
-    const noiseParams = renderingParams as any
-    uniforms.uNoiseParams.value.set(
-      noiseParams.noiseFreqX,
-      noiseParams.noiseFreqY,
-      noiseParams.noiseRemapMin,
-      noiseParams.noiseRemapMax
-    )
+    uniforms.uCullParams.value.set(p.cullStart, p.cullEnd, p.compensation)
 
     // Trigger shadow material to recompile when uniforms change
     depthMat.needsUpdate = true
-  }, [renderingParams, computeParams, windDirVec, cullControls, depthMat])
+  }, [geometryParams, windDirVec, depthMat])
 
   // Set envMap from scene
   useEffect(() => {
@@ -284,13 +279,14 @@ export default function Grass() {
 
   // Update time every frame and execute compute pass
   useFrame((state) => {
-    uniforms.uTime.value = state.clock.elapsedTime
+    uniforms.uWindTime.value = state.clock.elapsedTime
     // Update compute shader time uniform for wind field sampling
-    computeMaterial.uniforms.uTime.value = state.clock.elapsedTime
+    computeMaterial.uniforms.uWindTime.value = state.clock.elapsedTime
     // Update LOD range
-    uniforms.uLODRange.value.set(lodControls.lodStart, lodControls.lodEnd)
+    const p = geometryParams as any
+    uniforms.uLODRange.value.set(p.lodStart, p.lodEnd)
     compute() // Execute compute pass (single pass, multiple outputs)
-    
+
     // Update light direction and color from scene
     const light = scene.children.find((child) => child.type === 'DirectionalLight') as THREE.DirectionalLight | undefined
     if (light) {
@@ -299,10 +295,10 @@ export default function Grass() {
       const targetPos = new THREE.Vector3()
       light.getWorldPosition(lightPos)
       light.target.getWorldPosition(targetPos)
-      
+
       const lightDir = targetPos.sub(lightPos).normalize()
       uniforms.uLightDirection.value.copy(lightDir)
-      
+
       // Get light color
       const lightColor = new THREE.Color(light.color)
       uniforms.uLightColor.value.set(lightColor.r, lightColor.g, lightColor.b)

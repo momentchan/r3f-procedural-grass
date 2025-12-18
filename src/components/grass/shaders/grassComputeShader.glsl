@@ -2,31 +2,35 @@
 #define TWO_PI 6.28318530718
 
 // ============================================================================
-// Uniforms
+// Compute Uniforms
 // ============================================================================
 uniform vec2 uResolution;
-uniform sampler2D uPositions; // instanceOffset positions
-uniform float bladeHeightMin;
-uniform float bladeHeightMax;
-uniform float bladeWidthMin;
-uniform float bladeWidthMax;
-uniform float bendAmountMin;
-uniform float bendAmountMax;
-uniform float clumpSize;
-uniform float clumpRadius;
+uniform sampler2D uPositions;
+
+// Shape Parameters
+uniform float uBladeHeightMin;
+uniform float uBladeHeightMax;
+uniform float uBladeWidthMin;
+uniform float uBladeWidthMax;
+uniform float uBendAmountMin;
+uniform float uBendAmountMax;
+
+// Clump Parameters
+uniform float uClumpSize;
+uniform float uClumpRadius;
 uniform float uCenterYaw;
 uniform float uBladeYaw;
 uniform float uClumpYaw;
-uniform vec3 uBladeRandomness; // (height, width, bend) randomness multiplier
-uniform float uTypeTrendScale; // Scale factor for type trend noise (default 0.1)
+uniform vec3 uBladeRandomness;
+uniform float uTypeTrendScale;
 
-// Wind uniforms for compute pass
-uniform float uWindFacing; // Wind influence strength (0.0 = no influence, 1.0 = full influence)
-uniform float uTime;
+// Wind Parameters
+uniform float uWindTime;
 uniform float uWindScale;
 uniform float uWindSpeed;
-uniform float uWindStrength; // Wind strength multiplier
-uniform vec2 uWindDir; // Wind direction vector
+uniform float uWindStrength;
+uniform vec2 uWindDir;
+uniform float uWindFacing;
 
 
 // ============================================================================
@@ -75,7 +79,7 @@ float normalizeAngle(float angle) {
 // ============================================================================
 // Returns: distToCenter, cellId.x, cellId.y
 vec3 getClumpInfo(vec2 worldXZ) {
-  vec2 cell = worldXZ / clumpSize;
+  vec2 cell = worldXZ / uClumpSize;
   vec2 baseCell = floor(cell);
 
   float minDist = 1e9;
@@ -97,14 +101,14 @@ vec3 getClumpInfo(vec2 worldXZ) {
     }
   }
 
-  float distToCenter = sqrt(minDist) * clumpSize;
+  float distToCenter = sqrt(minDist) * uClumpSize;
   return vec3(distToCenter, bestCellId.x, bestCellId.y);
 }
 
 // Calculate direction from blade position to clump center
 vec2 calculateToCenter(vec2 worldXZ, vec2 cellId) {
   vec2 clumpSeed = hash2(cellId);
-  vec2 clumpCenterWorld = (cellId + clumpSeed) * clumpSize;
+  vec2 clumpCenterWorld = (cellId + clumpSeed) * uClumpSize;
   
   vec2 dir = clumpCenterWorld - worldXZ;
   float len = length(dir);
@@ -113,7 +117,7 @@ vec2 calculateToCenter(vec2 worldXZ, vec2 cellId) {
 
 // Calculate presence (fade-out factor) based on distance from clump center
 float calculatePresence(float distToCenter) {
-  float r = clamp(distToCenter / clumpRadius, 0.0, 1.0);
+  float r = clamp(distToCenter / uClumpRadius, 0.0, 1.0);
   float t = clamp((r - 0.7) / (1.0 - 0.7), 0.0, 1.0);
   float smoothstepVal = t * t * (3.0 - 2.0 * t);
   return 1.0 - smoothstepVal;
@@ -128,9 +132,9 @@ vec4 getClumpParams(vec2 cellId) {
   vec2 c2 = hash21(cellId * 23.0);
 
   // Use dynamic min/max ranges directly
-  float clumpBaseHeight = mix(bladeHeightMin, bladeHeightMax, c1.x);
-  float clumpBaseWidth = mix(bladeWidthMin, bladeWidthMax, c1.y);
-  float clumpBaseBend = mix(bendAmountMin, bendAmountMax, c2.x);
+  float clumpBaseHeight = mix(uBladeHeightMin, uBladeHeightMax, c1.x);
+  float clumpBaseWidth = mix(uBladeWidthMin, uBladeWidthMax, c1.y);
+  float clumpBaseBend = mix(uBendAmountMin, uBendAmountMax, c2.x);
   
   float typeTrend = simplexNoise2d(cellId * uTypeTrendScale);
   typeTrend = typeTrend * 0.5 + 0.5;
@@ -189,7 +193,7 @@ float applyWindFacingAndNormalize(float baseAngle, vec2 windDir, float windStren
 // Sample wind strength from noise field
 float calculateWindStrength(vec2 worldXZ) {
   vec2 windDir = safeNormalize(uWindDir);
-  vec2 windUv = worldXZ * uWindScale + windDir * uTime * uWindSpeed;
+  vec2 windUv = worldXZ * uWindScale + windDir * uWindTime * uWindSpeed;
   
   float windStrength01 = fbm2(windUv, 0.0);
   return clamp(windStrength01 * uWindStrength, 0.0, 1.0);
