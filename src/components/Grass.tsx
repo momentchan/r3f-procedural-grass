@@ -62,6 +62,13 @@ export default function Grass() {
     lodEnd: { value: 15, min: 0, max: 50, step: 1 },
   }))
 
+  // Culling controls
+  const [cullControls] = useControls('Grass.Culling', () => ({
+    cullDistance: { value: 25, min: 0, max: 50, step: 1 },
+    cullFade: { value: 5, min: 0, max: 50, step: 1 },
+    groundColor: { value: '#1a3310' },
+  }))
+
   // Vertex/Fragment shader parameters
   const [renderingParams] = useControls('Grass.Rendering', () => ({
     Geometry: folder({
@@ -163,6 +170,8 @@ export default function Grass() {
     uBaseWidth: { value: 0.35 }, // Base width factor for blade geometry
     uTipThin: { value: 0.9 }, // Tip thinning factor for blade geometry
     uLODRange: { value: new THREE.Vector2(15, 40) }, // LOD range: x = start fold distance, y = full fold distance
+    uCullRange: { value: new THREE.Vector2(60, 20) }, // Culling range: x = cull distance, y = cull fade range
+    uGroundColor: { value: new THREE.Vector3(0.1, 0.2, 0.05) }, // Ground surface color for material blending
     // Note: uWindSpeed is only used in compute shader for wind field translation
   }).current
 
@@ -231,9 +240,14 @@ export default function Grass() {
     uniforms.uTipThin.value = computeParams.tipThin
     // Note: uWindSpeed is only updated in compute shader
 
+    // Update culling uniforms
+    uniforms.uCullRange.value.set(cullControls.cullDistance, cullControls.cullFade)
+    const groundColorVec = new THREE.Color(cullControls.groundColor)
+    uniforms.uGroundColor.value.set(groundColorVec.r, groundColorVec.g, groundColorVec.b)
+
     // Trigger shadow material to recompile when uniforms change
     depthMat.needsUpdate = true
-  }, [renderingParams, computeParams, windDirVec, depthMat])
+  }, [renderingParams, computeParams, windDirVec, cullControls, depthMat])
 
   // Set envMap from scene
   useEffect(() => {

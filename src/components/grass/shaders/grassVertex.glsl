@@ -18,6 +18,7 @@ uniform float uSwayStrength;
 uniform float uBaseWidth;
 uniform float uTipThin;
 uniform vec2 uLODRange; // x: start fold distance, y: full fold distance
+uniform vec2 uCullRange; // x: cull distance, y: cull fade range
 
 // ============================================================================
 // Varyings
@@ -246,12 +247,35 @@ void main() {
   vec3 side = normalize(cross(ref, tangent));
   vec3 normal = normalize(cross(side, tangent));
 
-  // 8. Blade Geometry - Use shapeT for width calculation (maintains smooth tapering)
+  // 8. Per-Instance Culling (Density-based random culling)
+  // Calculate distance from instance base to camera
+  vec3 worldBasePos = (modelMatrix * vec4(instanceOffset, 1.0)).xyz;
+  float distToCam = length(cameraPosition - worldBasePos);
+  
+  // Culling parameters (from uniforms)
+  float cullDist = uCullRange.x; // Distance where grass starts to completely disappear
+  float cullFade = uCullRange.y; // Fade transition range
+  
+  // Calculate survival threshold: farther = lower survival rate
+  float survivalThreshold = smoothstep(cullDist - cullFade, cullDist, distToCam);
+  
+  // Use perBladeHash01 to determine if this blade should be culled
+  // If random value is less than survival threshold, the blade is culled
+  float isCulled = step(perBladeHash01, survivalThreshold);
+  
+  // Density Compensation: when half the grass disappears, remaining grass should be wider
+  // This prevents the grass from looking too sparse visually
+  float widthBoost = 1.0 + survivalThreshold * 1.5; // Survivors at distance become 1.5x wider
+  
+  // Apply culling to presence
+  float finalPresence = presence * (1.0 - isCulled);
+  
+  // 9. Blade Geometry - Use shapeT for width calculation (maintains smooth tapering)
   // This ensures the tip always has width = 0, even when vertices are folded
   float widthFactor = (shapeT + uBaseWidth) * pow(1.0 - shapeT, uTipThin);
-  vec3 lpos = spine + side * width * widthFactor * s * presence;
+  vec3 lpos = spine + side * (width * widthBoost) * widthFactor * s * finalPresence;
 
-  // 9. Apply Rotation
+  // 10. Apply Rotation
   lpos.xz = rotate2D(lpos.xz, facingAngle);
   tangent.xz = rotate2D(tangent.xz, facingAngle);
   side.xz = rotate2D(side.xz, facingAngle);
@@ -260,15 +284,15 @@ void main() {
   side = normalize(side);
   normal = normalize(normal);
 
-  // 10. Transform to World Space
+  // 11. Transform to World Space
   vec3 posObj = lpos + instanceOffset;
   vec3 posW = (modelMatrix * vec4(posObj, 1.0)).xyz;
 
-  // 11. View-dependent Tilt (use shapeT for tilt calculation to maintain smooth appearance)
+  // 12. View-dependent Tilt (use shapeT for tilt calculation to maintain smooth appearance)
   vec3 posObjTilted = applyViewDependentTilt(posObj, posW, tangent, side, normal, uv, shapeT);
   vec3 posWTilted = (modelMatrix * vec4(posObjTilted, 1.0)).xyz;
 
-  // 12. Output
+  // 13. Output
   csm_Position = posObjTilted;
 
   vN = -normal;

@@ -10,6 +10,8 @@ uniform vec2 uBladeSeedRange;  // min, max for blade seed color variation
 uniform vec2 uClumpInternalRange;  // min, max for clump internal color variation
 uniform vec2 uClumpSeedRange;  // min, max for clump seed color variation
 uniform float uAOPower;  // power exponent for AO curve
+uniform vec2 uCullRange; // x: cull distance, y: cull fade range (for material blending)
+uniform vec3 uGroundColor; // Ground surface color for material blending
 
 varying float vHeight;
 varying vec2 vUv;
@@ -37,13 +39,21 @@ vec3 computeLightingNormal(
   float dist = length(cameraPosition - worldPos);
   float distMask = smoothstep(4.0, 12.0, dist);
   
-  return normalize(
+  // Blend to clump normal first
+  vec3 blendedNormal = normalize(
     mix(
       geoNormal,
       clumpNormal,
       heightMask * distMask
     )
   );
+  
+  // Material blending: fade to ground normal at distance (visual denoising)
+  // This makes distant grass blend better with the ground
+  float mixToGround = smoothstep(uCullRange.x - uCullRange.y, uCullRange.x, dist);
+  vec3 groundNormal = vec3(0.0, 1.0, 0.0);
+  
+  return normalize(mix(blendedNormal, groundNormal, mixToGround));
 }
 
 // ============================================================================
@@ -110,6 +120,11 @@ void main() {
 
   // Reduce contrast and color variation at distance
   color = mix(color, vec3(dot(color, vec3(0.333))), distFade * 0.35);
+  
+  // Material Blending: fade to ground color at distance (visual denoising)
+  // This makes distant grass blend better with the ground surface
+  float mixToGroundColor = smoothstep(uCullRange.x - uCullRange.y, uCullRange.x, dist);
+  color = mix(color, uGroundColor, mixToGroundColor * 0.5);
 
   // --------------------------------------------------------------------------
   // 8. Fake Translucency / Backlight (Ghost core)

@@ -92,7 +92,7 @@ export default function App() {
             camera={{
                 fov: 45,
                 near: 0.1,
-                far: 20,
+                far: 30,
                 position: [0, 0, 5]
             }}
             gl={{ preserveDrawingBuffer: true }}
@@ -113,7 +113,7 @@ export default function App() {
             <Effects />
             <mesh receiveShadow rotation-x={-Math.PI / 2}>
                 <planeGeometry args={[10, 10]}  />
-                <meshStandardMaterial color="white"/>
+                <meshStandardMaterial color="#1a3310"/>
             </mesh>
 
         </Canvas>
