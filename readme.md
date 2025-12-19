@@ -2,20 +2,22 @@
 
 A procedural 3D grass rendering demo built with React Three Fiber, featuring GPU-computed grass blades, dynamic terrain generation, and custom shaders.
 
+This implementation is inspired by the procedural grass system featured in **Ghost of Tsushima**, which showcases GPU-based grass rendering techniques for creating realistic, dynamic grass fields. For more details on the original implementation, see the GDC talk: [Procedural Grass in 'Ghost of Tsushima'](https://gdcvault.com/play/1027033/Advanced-Graphics-Summit-Procedural-Grass) by Eric Wohllaib from Sucker Punch Productions.
+
 ## Features
 
 - 🌱 **Procedural Grass Rendering**: GPU-computed grass blades with realistic wind animation and physics simulation
 - 🏔️ **Dynamic Terrain**: Procedurally generated terrain using fractional Brownian motion (FBM) with customizable height, frequency, and seed
-- 🎨 **Custom Shaders**: Advanced GLSL shaders for grass vertex and fragment rendering with lighting and wind effects
+- 🎨 **Custom Shaders**: GLSL shaders for grass vertex and fragment rendering with lighting and wind effects
 - 🌅 **Procedural Background**: Dynamic sky and procedural sphere backgrounds that respond to sun position
 - 🎛️ **Interactive Controls**: Real-time parameter adjustment via Leva controls for grass, terrain, and lighting
-- ✨ **Post-Processing**: Advanced visual effects including SMAA anti-aliasing and custom post-processing pipelines
+- ✨ **Post-Processing**: Visual effects including SMAA anti-aliasing and custom post-processing pipelines
 
 ## Tech Stack
 
 - **React Three Fiber** - React renderer for Three.js
 - **Three.js** - 3D graphics library
-- **Custom Shader Materials** - Advanced shader customization
+- **Custom Shader Materials** - Shader customization
 - **GPGPU Compute** - GPU-based grass blade simulation
 - **Leva** - Interactive controls GUI
 - **Vite** - Build tool and dev server
@@ -103,4 +105,4 @@ The project uses:
 
 ## License
 
-Private project - All rights reserved
+MIT License
