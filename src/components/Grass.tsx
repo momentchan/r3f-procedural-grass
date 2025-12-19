@@ -11,9 +11,11 @@ import { createGrassGeometry } from './grass/utils'
 import { useGrassCompute } from './grass/hooks/useGrassCompute'
 import grassVertexShader from './grass/shaders/grassVertex.glsl?raw'
 import grassFragmentShader from './grass/shaders/grassFragment.glsl?raw'
+import { terrainMath } from './TerrainMath'
 
 const grassVertex = /* glsl */ `
   ${utility}
+  ${terrainMath}
   ${grassVertexShader}
 `
 const grassFragment = /* glsl */ `
@@ -22,7 +24,15 @@ const grassFragment = /* glsl */ `
   ${grassFragmentShader}
 `
 
-export default function Grass() {
+interface GrassProps {
+  terrainParams?: {
+    amplitude: number
+    frequency: number
+    seed: number
+  }
+}
+
+export default function Grass({ terrainParams }: GrassProps = {} as GrassProps) {
   const { scene } = useThree()
 
   const [geometryParams] = useControls('Grass', () => ({
@@ -191,6 +201,10 @@ export default function Grass() {
     uLODRange: { value: new THREE.Vector2(15, 40) },
     // Cull Uniforms
     uCullParams: { value: new THREE.Vector3(40, 80, 1.5) },
+    // Terrain Uniforms
+    uTerrainAmp: { value: 0.3 },
+    uTerrainFreq: { value: 0.4 },
+    uTerrainSeed: { value: 0.0 },
   }).current
 
   // Update texture uniforms when render targets change
@@ -265,9 +279,16 @@ export default function Grass() {
     // Update culling uniforms
     uniforms.uCullParams.value.set(p.cullStart, p.cullEnd, p.compensation)
 
+    // Sync Terrain Params
+    if (terrainParams) {
+      uniforms.uTerrainAmp.value = terrainParams.amplitude
+      uniforms.uTerrainFreq.value = terrainParams.frequency
+      uniforms.uTerrainSeed.value = terrainParams.seed
+    }
+
     // Trigger shadow material to recompile when uniforms change
     depthMat.needsUpdate = true
-  }, [geometryParams, windDirVec, depthMat])
+  }, [geometryParams, windDirVec, depthMat, terrainParams])
 
   // Set envMap from scene
   useEffect(() => {

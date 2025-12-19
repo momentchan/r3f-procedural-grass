@@ -310,8 +310,31 @@ void main() {
   side = normalize(side);
   normal = normalize(normal);
 
+  // 11.5. Terrain Height and Slope Alignment
+  // Calculate world position anchor for terrain sampling
+  // Get terrain data
+  float terrainHeight = getTerrainHeight(worldBasePos.xz);
+  vec3 terrainNormal = getTerrainNormal(worldBasePos.xz);
+  
+  // Slope Alignment: Align the local "Up" vector (0,1,0) to the "Terrain Normal"
+  vec3 up = vec3(0.0, 1.0, 0.0);
+  vec3 axis = cross(up, terrainNormal);
+  float dotProd = clamp(dot(up, terrainNormal), -1.0, 1.0);
+  float angle = acos(dotProd);
+  
+  // Only rotate if slope is significant
+  if (length(axis) > 0.001) {
+      axis = normalize(axis);
+      lpos = rotateAxis(lpos, axis, angle);
+      tangent = rotateAxis(tangent, axis, angle);
+      side = rotateAxis(side, axis, angle);
+      normal = rotateAxis(normal, axis, angle);
+  }
+
   // 12. Transform to World Space
   vec3 posObj = lpos + instanceOffset;
+  // Apply terrain height offset (Y-up in world space)
+  posObj.y += terrainHeight;
   vec3 posW = (modelMatrix * vec4(posObj, 1.0)).xyz;
 
   // 13. View-dependent Tilt (use shapeT for tilt calculation to maintain smooth appearance)
