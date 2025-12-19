@@ -37,16 +37,6 @@ export default function Effects() {
         adaptationRate: { value: 1.0, min: 0.01, max: 5, step: 0.01 }
     }, { collapsed: true });
 
-    // Leva controls for post-processing effects
-    const n8aoParams = useControls('Effects.N8AO', {
-        enabled: { value: false, label: 'Enable N8AO' },
-        aoRadius: { value: 2, min: 0, max: 10, step: 0.1 },
-        aoIntensity: { value: 2, min: 0, max: 10, step: 0.1 },
-        aoSamples: { value: 6, min: 1, max: 32, step: 1 },
-        denoiseSamples: { value: 4, min: 1, max: 16, step: 1 },
-        distanceFalloff: { value: 1, min: 0, max: 10, step: 0.1 },
-    }, { collapsed: true })
-
     const effects = useMemo(() => {
 
         const effectsList = [];
@@ -98,20 +88,8 @@ export default function Effects() {
             );
         }
 
-        if (n8aoParams.enabled) {
-            effectsList.push(
-                <N8AO
-                    key="n8ao"
-                    aoRadius={n8aoParams.aoRadius}
-                    intensity={n8aoParams.aoIntensity}
-                    aoSamples={n8aoParams.aoSamples}
-                    denoiseSamples={n8aoParams.denoiseSamples}
-                />
-            );
-        }
-
         return effectsList;
-    }, [smaaParams, dofParams, bloomParams, n8aoParams, toneMappingParams]);
+    }, [smaaParams, dofParams, bloomParams, toneMappingParams]);
 
     return (
         <EffectComposer

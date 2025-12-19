@@ -9,6 +9,7 @@ import * as THREE from 'three'
 import { CustomShaderMaterial } from "@packages/r3f-gist/shaders/materials/CustomShaderMaterial";
 import Effects from "../components/Effects";
 import { Sky } from "@react-three/drei";
+import { Terrain } from "../components/Terrain";
 
 function DirectionalLightHelper() {
     const directionalLightRef = useRef<THREE.DirectionalLight>(null)
@@ -105,16 +106,17 @@ export default function App() {
             <CameraControls makeDefault />
             <Environment preset="city" environmentIntensity={0.2} />
             <DirectionalLightHelper />
-            <Sky />
+            {/* <Sky /> */}
+            <Terrain />
             {/* <BasicMesh /> */}
-            <Grass />
+            {/* <Grass /> */}
             {/* <NormalSphere /> */}
             <CanvasCapture />
             <Effects />
-            <mesh receiveShadow rotation-x={-Math.PI / 2}>
+            {/* <mesh receiveShadow rotation-x={-Math.PI / 2}>
                 <planeGeometry args={[20, 20]}  />
                 <meshStandardMaterial color="#1a3310"/>
-            </mesh>
+            </mesh> */}
 
         </Canvas>
     </>

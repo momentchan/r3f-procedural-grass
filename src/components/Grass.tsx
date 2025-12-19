@@ -58,7 +58,7 @@ export default function Grass() {
         bladeSeedRange: { value: { x: 0.95, y: 1.03 }, step: 0.01, min: 0.5, max: 1.5 },
         clumpInternalRange: { value: { x: 0.95, y: 1.05 }, step: 0.01, min: 0.5, max: 1.5 },
         clumpSeedRange: { value: { x: 0.9, y: 1.1 }, step: 0.01, min: 0.5, max: 1.5 },
-        aoPower: { value: 5, min: 0.1, max: 5.0, step: 0.1 },
+        aoPower: { value: 5, min: 0.1, max: 20.0, step: 0.1 },
       }, { collapsed: true }),
       Normal: folder({
         midSoft: { value: 0.25, min: 0.0, max: 1.0, step: 0.01 },
