@@ -3,7 +3,7 @@ import { useMemo, useEffect, useRef } from 'react'
 import { useControls } from 'leva'
 import CustomShaderMaterial from 'three-custom-shader-material'
 import { terrainMath } from './terrain/TerrainMath'
-import { PATCH_SIZE } from './grass/constants'
+import { DEFAULT_PATCH_SIZE } from './grass/constants'
 
 const terrainVertex = /* glsl */ `
   ${terrainMath}
@@ -34,7 +34,7 @@ const terrainFragment = /* glsl */ `
   }
 `
 
-export function Terrain({ onParamsChange }: { onParamsChange?: (params: { amplitude: number; frequency: number; seed: number; color: string }) => void }) {
+export function Terrain({ onParamsChange, patchSize = DEFAULT_PATCH_SIZE }: { onParamsChange?: (params: { amplitude: number; frequency: number; seed: number; color: string }) => void; patchSize?: number }) {
   const materialRef = useRef<any>(null)
 
   const terrainParams = useControls('Terrain', {
@@ -77,7 +77,7 @@ export function Terrain({ onParamsChange }: { onParamsChange?: (params: { amplit
   return (
     // High segment count is needed for smooth FBM terrain
     <mesh rotation={[-Math.PI / 2, 0, 0]}>
-      <planeGeometry args={[PATCH_SIZE, PATCH_SIZE, 20, 20]} />
+      <planeGeometry args={[patchSize, patchSize, 20, 20]} />
       <CustomShaderMaterial
         ref={materialRef}
         baseMaterial={THREE.MeshStandardMaterial}

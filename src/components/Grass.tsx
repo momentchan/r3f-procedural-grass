@@ -6,7 +6,7 @@ import CustomShaderMaterial from 'three-custom-shader-material'
 import CustomShaderMaterialVanilla from 'three-custom-shader-material/vanilla'
 import utility from '@packages/r3f-gist/shaders/cginc/math/utility.glsl'
 import simplexNoise from '@packages/r3f-gist/shaders/cginc/noise/simplexNoise.glsl'
-import { GRID_SIZE, GRASS_BLADES, BLADE_SEGMENTS } from './grass/constants'
+import { DEFAULT_GRID_SIZE, DEFAULT_PATCH_SIZE, BLADE_SEGMENTS, getGrassBladesCount } from './grass/constants'
 import { createGrassGeometry } from './grass/utils'
 import { useGrassCompute } from './grass/hooks/useGrassCompute'
 import grassVertexShader from './grass/shaders/grassVertex.glsl?raw'
@@ -31,6 +31,8 @@ interface GrassProps {
     seed: number
     color: string
   }
+  patchSize?: number
+  onPatchSizeChange?: (patchSize: number) => void
 }
 
 // Color presets for tipColor
@@ -42,11 +44,15 @@ const TIP_COLOR_PRESETS = [
   '#7c7c22', // Yellow
 ]
 
-export default function Grass({ terrainParams }: GrassProps = {} as GrassProps) {
+export default function Grass({ terrainParams, patchSize: initialPatchSize = DEFAULT_PATCH_SIZE, onPatchSizeChange }: GrassProps = {} as GrassProps) {
   const { scene } = useThree()
   const [presetIndex, setPresetIndex] = useState(0)
 
   const [grassParams, setGrassParams] = useControls('Grass', () => ({
+    Size: folder({
+      gridSize: { value: DEFAULT_GRID_SIZE, min: 64, max: 512, step: 64 },
+      patchSize: { value: initialPatchSize, min: 5, max: 50, step: 1 },
+    }, { collapsed: true }),
     Geometry: folder({
       Shape: folder({
         bladeHeightMin: { value: 0.4, min: 0.1, max: 2.0, step: 0.01 },
@@ -152,7 +158,18 @@ export default function Grass({ terrainParams }: GrassProps = {} as GrassProps) 
     setGrassParams({ tipColor: newColor })
   }, [presetIndex, setGrassParams])
 
-  const geometry = useMemo(() => createGrassGeometry(), [])
+  const gridSize = (grassParams as any).gridSize
+  const patchSize = (grassParams as any).patchSize
+  const grassBlades = getGrassBladesCount(gridSize)
+
+  // Notify parent of patchSize changes
+  useEffect(() => {
+    if (onPatchSizeChange) {
+      onPatchSizeChange(patchSize)
+    }
+  }, [patchSize, onPatchSizeChange])
+
+  const geometry = useMemo(() => createGrassGeometry(gridSize, patchSize), [gridSize, patchSize])
 
   const materialRef = useRef<any>(null)
 
@@ -199,7 +216,7 @@ export default function Grass({ terrainParams }: GrassProps = {} as GrassProps) 
     uWindStrength: params.windStrength,
   }), [params, bladeRandomnessVec, windDirVec])
 
-  const { bladeParamsRT, clumpDataRT, additionalDataRT, computeMaterial, compute } = useGrassCompute(computeConfig)
+  const { bladeParamsRT, clumpDataRT, additionalDataRT, computeMaterial, compute } = useGrassCompute(computeConfig, gridSize, patchSize)
 
   // Create uniform objects once and reuse them
   const uniforms = useRef({
@@ -207,7 +224,7 @@ export default function Grass({ terrainParams }: GrassProps = {} as GrassProps) 
     uTextureBladeParams: { value: bladeParamsRT.texture },
     uTextureClumpData: { value: clumpDataRT.texture },
     uTextureMotionSeeds: { value: additionalDataRT.texture },
-    uTextureGrassSize: { value: new THREE.Vector2(GRID_SIZE, GRID_SIZE) },
+    uTextureGrassSize: { value: new THREE.Vector2(gridSize, gridSize) },
     // Geometry Uniforms
     uGeometryThicknessStrength: { value: 0.02 },
     uGeometryBaseWidth: { value: 0.35 },
@@ -252,7 +269,8 @@ export default function Grass({ terrainParams }: GrassProps = {} as GrassProps) 
     uniforms.uTextureBladeParams.value = bladeParamsRT.texture
     uniforms.uTextureClumpData.value = clumpDataRT.texture
     uniforms.uTextureMotionSeeds.value = additionalDataRT.texture
-  }, [bladeParamsRT.texture, clumpDataRT.texture, additionalDataRT.texture])
+    uniforms.uTextureGrassSize.value.set(gridSize, gridSize)
+  }, [bladeParamsRT.texture, clumpDataRT.texture, additionalDataRT.texture, gridSize])
 
 
   // Create depth material for directional/spot light shadows
@@ -386,7 +404,7 @@ export default function Grass({ terrainParams }: GrassProps = {} as GrassProps) 
 
   return (
     <instancedMesh
-      args={[geometry, undefined as any, GRASS_BLADES]}
+      args={[geometry, undefined as any, grassBlades]}
       geometry={geometry}
       // castShadow
       // receiveShadow

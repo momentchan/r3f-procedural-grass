@@ -14,6 +14,7 @@ import { Perf } from "r3f-perf";
 export default function App() {
     const [terrainParams, setTerrainParams] = useState<{ amplitude: number; frequency: number; seed: number; color: string } | undefined>(undefined)
     const [lightPosition, setLightPosition] = useState<THREE.Vector3 | undefined>(undefined)
+    const [patchSize, setPatchSize] = useState<number | undefined>(undefined)
 
     return <>
         <LevaWrapper collapsed={true} />
@@ -39,8 +40,8 @@ export default function App() {
             <Environment preset="city" environmentIntensity={0.2} />
             <DirectionalLight onPositionChange={setLightPosition} />
             <Background sunPosition={lightPosition} />
-            <Terrain onParamsChange={setTerrainParams} />
-            <Grass terrainParams={terrainParams} />
+            <Terrain onParamsChange={setTerrainParams} patchSize={patchSize} />
+            <Grass terrainParams={terrainParams} patchSize={patchSize} onPatchSizeChange={setPatchSize} />
             <CanvasCapture />
             <Effects />
         </Canvas>

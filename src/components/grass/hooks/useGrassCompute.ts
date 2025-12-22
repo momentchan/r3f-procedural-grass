@@ -5,7 +5,6 @@ import { useMemo, useEffect } from 'react'
 import { useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { createPositionTexture } from '../utils'
-import { GRID_SIZE } from '../constants'
 import grassComputeShader from '../shaders/grassComputeShader.glsl?raw'
 import fractal from '@packages/r3f-gist/shaders/cginc/noise/fractal.glsl'
 
@@ -34,15 +33,15 @@ export interface GrassComputeConfig {
     uWindStrength: number
 }
 
-export function useGrassCompute(config: GrassComputeConfig) {
+export function useGrassCompute(config: GrassComputeConfig, gridSize: number, patchSize: number) {
     const gl = useThree((state) => state.gl)
     
     // Create position texture
-    const positionTexture = useMemo(() => createPositionTexture(), [])
+    const positionTexture = useMemo(() => createPositionTexture(gridSize, patchSize), [gridSize, patchSize])
 
     // Create multiple render targets for compute pass (single pass, multiple outputs)
     const mrt = useMemo(() => {
-        const renderTarget = new THREE.WebGLRenderTarget(GRID_SIZE, GRID_SIZE, {
+        const renderTarget = new THREE.WebGLRenderTarget(gridSize, gridSize, {
             count: 3, // Multiple render targets: bladeParams, clumpData, additionalData
             minFilter: THREE.NearestFilter,
             magFilter: THREE.NearestFilter,
@@ -51,7 +50,7 @@ export function useGrassCompute(config: GrassComputeConfig) {
         })
         
         return renderTarget
-    }, [])
+    }, [gridSize])
     
     const bladeParamsRT = useMemo(() => ({ texture: mrt.textures[0] }), [mrt])
     const clumpDataRT = useMemo(() => ({ texture: mrt.textures[1] }), [mrt])
@@ -70,7 +69,7 @@ export function useGrassCompute(config: GrassComputeConfig) {
             ${grassComputeShader}
         `,
         uniforms: {
-            uResolution: { value: new THREE.Vector2(GRID_SIZE, GRID_SIZE) },
+            uResolution: { value: new THREE.Vector2(gridSize, gridSize) },
             uPositions: { value: positionTexture },
             uBladeHeightMin: { value: config.bladeHeightMin },
             uBladeHeightMax: { value: config.bladeHeightMax },
@@ -92,7 +91,7 @@ export function useGrassCompute(config: GrassComputeConfig) {
             uWindFacing: { value: config.uWindFacing },
             uWindStrength: { value: config.uWindStrength },
         }
-    }), [positionTexture, config])
+    }), [positionTexture, config, gridSize])
 
     // Create fullscreen quad for compute pass
     const computeScene = useMemo(() => {
@@ -118,6 +117,7 @@ export function useGrassCompute(config: GrassComputeConfig) {
 
     // Update compute material uniforms when params change
     useEffect(() => {
+        grassComputeMat.uniforms.uResolution.value.set(gridSize, gridSize)
         grassComputeMat.uniforms.uBladeHeightMin.value = config.bladeHeightMin
         grassComputeMat.uniforms.uBladeHeightMax.value = config.bladeHeightMax
         grassComputeMat.uniforms.uBladeWidthMin.value = config.bladeWidthMin
@@ -137,7 +137,7 @@ export function useGrassCompute(config: GrassComputeConfig) {
         grassComputeMat.uniforms.uWindDir.value = config.uWindDir
         grassComputeMat.uniforms.uWindFacing.value = config.uWindFacing
         grassComputeMat.uniforms.uWindStrength.value = config.uWindStrength
-    }, [config, grassComputeMat])
+    }, [config, grassComputeMat, gridSize])
 
     // Memoize compute function to avoid recreating it every render
     const compute = useMemo(() => {
