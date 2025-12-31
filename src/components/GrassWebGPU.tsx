@@ -199,6 +199,7 @@ export default function GrassWebGPU({ terrainParams, patchSize: initialPatchSize
     // Get params from grassParams for initial values
     const params = grassParams as any
     const { computeFn, uniforms } = createGrassCompute(grassData, positions, {
+      // Shape Parameters
       bladeHeightMin: params.bladeHeightMin,
       bladeHeightMax: params.bladeHeightMax,
       bladeWidthMin: params.bladeWidthMin,
@@ -206,16 +207,25 @@ export default function GrassWebGPU({ terrainParams, patchSize: initialPatchSize
       bendAmountMin: params.bendAmountMin,
       bendAmountMax: params.bendAmountMax,
       bladeRandomness: params.bladeRandomness,
+      // Clump Parameters
+      clumpSize: params.clumpSize,
+      clumpRadius: params.clumpRadius,
+      centerYaw: params.centerYaw,
+      bladeYaw: params.bladeYaw,
+      clumpYaw: params.clumpYaw,
+      typeTrendScale: params.typeTrendScale,
+      // Wind Parameters
+      windTime: 0.0, // Will be updated in useFrame
+      windScale: params.windScale ?? 0.25,
+      windSpeed: params.windSpeed,
+      windStrength: params.windStrength,
+      windDir: { x: params.windDirX, y: params.windDirZ },
+      windFacing: params.windFacing,
     })
 
     const grassCompute = computeFn().compute(grassBlades)
-
-    // Store uniform references for later updates (like effectController in birds example)
     computeUniformsRef.current = uniforms
-
     grassComputeRef.current = grassCompute
-
-
 
     const grassVertex = Fn(() => {
       const data = grassData.element(instanceIndex);
@@ -232,8 +242,6 @@ export default function GrassWebGPU({ terrainParams, patchSize: initialPatchSize
         positionLocal.z
       )
       const position = scaledPosition.add(instancePos);
-
-
       return cameraProjectionMatrix.mul(cameraViewMatrix).mul(position)
     })
     material.vertexNode = grassVertex()
@@ -258,7 +266,7 @@ export default function GrassWebGPU({ terrainParams, patchSize: initialPatchSize
     const params = grassParams as any
     const uniforms = computeUniformsRef.current
 
-    // Update uniform values from Leva controls - using .value property directly
+    // Update shape parameter uniforms from Leva controls
     uniforms.uBladeHeightMin.value = params.bladeHeightMin
     uniforms.uBladeHeightMax.value = params.bladeHeightMax
     uniforms.uBladeWidthMin.value = params.bladeWidthMin
@@ -270,12 +278,32 @@ export default function GrassWebGPU({ terrainParams, patchSize: initialPatchSize
       params.bladeRandomness.y,
       params.bladeRandomness.z
     )
+    
+    // Update clump parameter uniforms
+    uniforms.uClumpSize.value = params.clumpSize
+    uniforms.uClumpRadius.value = params.clumpRadius
+    uniforms.uCenterYaw.value = params.centerYaw
+    uniforms.uBladeYaw.value = params.bladeYaw
+    uniforms.uClumpYaw.value = params.clumpYaw
+    uniforms.uTypeTrendScale.value = params.typeTrendScale
+    
+    // Update wind parameter uniforms
+    if (uniforms.uWindScale) uniforms.uWindScale.value = params.windScale ?? 0.25
+    if (uniforms.uWindSpeed) uniforms.uWindSpeed.value = params.windSpeed
+    if (uniforms.uWindStrength) uniforms.uWindStrength.value = params.windStrength
+    if (uniforms.uWindDir) uniforms.uWindDir.value.set(params.windDirX, params.windDirZ)
+    if (uniforms.uWindFacing) uniforms.uWindFacing.value = params.windFacing
   }, [grassParams])
 
 
-  useFrame(() => {
+  useFrame(({ clock }) => {
     const renderer = gl as unknown as WebGPURenderer
-    if (!grassComputeRef.current) return
+    if (!grassComputeRef.current || !computeUniformsRef.current) return
+
+    // Update windTime based on elapsed time
+    if (computeUniformsRef.current.uWindTime) {
+      computeUniformsRef.current.uWindTime.value = clock.getElapsedTime()
+    }
 
     renderer.compute(grassComputeRef.current)
   })
