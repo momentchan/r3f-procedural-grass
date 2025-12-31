@@ -29,6 +29,9 @@ import {
   oneMinus,
   step,
   smoothstep,
+  varying,
+  abs,
+  negate,
 } from "three/tsl";
 
 /**
@@ -48,6 +51,15 @@ export function createGrassMaterial(
     swayStrength?: number;
     windDistanceStart?: number;
     windDistanceEnd?: number;
+    cullStart?: number;
+    cullEnd?: number;
+    roughness?: number;
+    metalness?: number;
+    emissive?: string;
+    envMapIntensity?: number;
+    midSoft?: number;
+    rimPos?: number;
+    rimSoft?: number;
   }
 ) {
   const baseWidth = options?.baseWidth ?? 0.35;
@@ -62,8 +74,34 @@ export function createGrassMaterial(
   const uWindDistanceStart = uniform(float(options?.windDistanceStart ?? 10.0)).setName('uWindDistanceStart');
   const uWindDistanceEnd = uniform(float(options?.windDistanceEnd ?? 30.0)).setName('uWindDistanceEnd');
   
+  // Cull params for ground blending
+  const uCullStart = uniform(float(options?.cullStart ?? 15.0)).setName('uCullStart');
+  const uCullEnd = uniform(float(options?.cullEnd ?? 30.0)).setName('uCullEnd');
+  
+  // Width shaping uniforms
+  const uMidSoft = uniform(float(options?.midSoft ?? 0.25)).setName('uMidSoft');
+  const uRimPos = uniform(float(options?.rimPos ?? 0.42)).setName('uRimPos');
+  const uRimSoft = uniform(float(options?.rimSoft ?? 0.03)).setName('uRimSoft');
+  
+  // Define varyings for passing data from vertex to fragment
+  const vGeoNormal = varying(vec3(0.0)).setName('vGeoNormal');
+  const vHeight = varying(float(0.0)).setName('vHeight');
+  const vToCenter = varying(vec2(0.0)).setName('vToCenter');
+  const vWorldPos = varying(vec3(0.0)).setName('vWorldPos');
+  const vSide = varying(vec3(0.0)).setName('vSide');
+  
   const material = new THREE.MeshStandardNodeMaterial();
   material.side = THREE.DoubleSide;
+  
+  // Apply material properties
+  material.roughness = options?.roughness ?? 0.3;
+  material.metalness = options?.metalness ?? 0.5;
+  if (options?.emissive) {
+    material.emissive = new THREE.Color(options.emissive);
+  }
+  material.envMapIntensity = options?.envMapIntensity ?? 0.5;
+
+  
 
   const grassVertex = Fn(() => {
     // Bezier Curve Functions
@@ -256,57 +294,82 @@ export function createGrassMaterial(
     // Rotate only XZ components, preserving Y
     const lposXZ = mx_rotate2d(vec2(lpos.x, lpos.z), facingAngle);
     const lposRotated = vec3(lposXZ.x, lpos.y, lposXZ.y);
-    
-    const tangentXZ = mx_rotate2d(vec2(tangent.x, tangent.z), facingAngle);
-    const tangentRot = vec3(tangentXZ.x, tangent.y, tangentXZ.y);
-    
+
+    const normalXZ = mx_rotate2d(vec2(normal.x, normal.z), facingAngle);
+    const normalRotated = vec3(normalXZ.x, normal.y, normalXZ.y);
+
+    // Rotate side vector for fragment shader
     const sideXZ = mx_rotate2d(vec2(side.x, side.z), facingAngle);
-    const sideRot = vec3(sideXZ.x, side.y, sideXZ.y);
+    const sideRotated = normalize(vec3(sideXZ.x, side.y, sideXZ.y));
 
-    // Re-normalize after rotation (matching GLSL)
-    const tangentRotNorm = normalize(tangentRot);
-    const sideRotNorm = normalize(sideRot);
-    const normalRot = normalize(cross(sideRotNorm, tangentRotNorm));
+    // Get toCenter from compute shader data
+    const toCenter = data.get("toCenter").toConst("toCenter");
 
-    // Add instance position
+    // Calculate world position for fragment shader
     const position = lposRotated.add(instancePos);
+    const positionWorldVec4 = modelWorldMatrix.mul(vec4(position.x, position.y, position.z, float(1.0)));
+    const worldPos = positionWorldVec4.xyz;
+
+    // Write to varyings for fragment shader
+    vGeoNormal.assign(normalRotated);
+    vHeight.assign(shapeT);
+    vToCenter.assign(toCenter);
+    vWorldPos.assign(worldPos);
+    vSide.assign(sideRotated);
     
     return cameraProjectionMatrix.mul(cameraViewMatrix).mul(position);
   });
 
   material.vertexNode = grassVertex();
 
+  const computeLightingNormal = Fn(([geoNormal, toCenter, height, worldPos]: [any, any, any, any]) => {
+    // Clump normal: cone-shaped normal pointing towards clump center
+    const clumpNormal = normalize(vec3(toCenter.x, float(0.7), toCenter.y));
 
-//   const grassStructure = struct({
-//     // Blade parameters
-//     bladeHeight: 'float',
-//     bladeWidth: 'float',
-//     bladeBend: 'float',
-//     bladeType: 'float',
-  
-//     // Clump data
-//     toCenter: 'vec2',
-//     presence: 'float',
-//     clumpSeed01: 'float',
-  
-//     // Motion seeds
-//     facingAngle01: 'float',
-//     perBladeHash01: 'float',
-//     windStrength01: 'float',
-//     lodSeed01: 'float',
-//   })
-  material.colorNode = Fn(() => {
-    const data = grassData.element(instanceIndex);
-    const facingAngle01 = data.get("facingAngle01").toConst("facingAngle01");
+    // Height mask: bottom is influenced more by the clump; top by geometry
+    const heightMask = pow(float(1.0).sub(height), float(0.7));
 
-    const windStrength01 = data.get("windStrength01").toConst("windStrength01");
-    const presence = data.get("presence").toConst("presence");
-    const instancePos = positions.element(instanceIndex);
+    // Distance mask: further from the camera, blend more toward clump normal (reduces grain)
+    const dist = length(cameraPosition.sub(worldPos));
+    const distMask = smoothstep(float(4.0), float(12.0), dist);
 
+    // Blend geometry normal and clump normal
+    const blendFactor = heightMask.mul(distMask);
+    const blendedNormal = normalize(mix(geoNormal, clumpNormal, blendFactor));
 
-    return windStrength01;
-    return vec4(instancePos.x, instancePos.z, 0, 1.0);
+    // Ground blending: at distance, blend fully to ground up-normal
+    const mixToGround = smoothstep(uCullStart, uCullEnd, dist);
+    const groundNormal = vec3(0.0, 1.0, 0.0);
+
+    return normalize(mix(blendedNormal, groundNormal, mixToGround));
+  });
+
+  // Set normal node for PBR lighting
+  material.normalNode = Fn(() => {
+    // Width shaping (Rim + Midrib) - matching GLSL fragment shader
+    const uvCoords = uv();
+    const u = uvCoords.x.sub(0.5);
+    const au = abs(u);
+
+    const mid01 = smoothstep(uMidSoft.negate(), uMidSoft, u);
+    const rimMask = smoothstep(uRimPos, uRimPos.add(uRimSoft), au);
+    const v01 = mix(mid01, oneMinus(mid01), rimMask);
+    const ny = v01.mul(2.0).sub(1.0);
+
+    const widthNormalStrength = float(0.35);
+    const sideNorm = normalize(vSide);
+    const baseNormal = normalize(vGeoNormal);
+    
+    // Apply width-based normal offset
+    const geoNormal = normalize(baseNormal.add(sideNorm.mul(ny).mul(widthNormalStrength)));
+
+    return computeLightingNormal(geoNormal, vToCenter, vHeight, vWorldPos);
   })();
+
+  // Fragment shader for color (placeholder for now)
+//   material.fragmentNode = Fn(() => {
+//     return vec4(materialNormal, 1.0); // Simple green color for now
+//   })();
 
   return {
     material,
@@ -318,6 +381,11 @@ export function createGrassMaterial(
       uWindSwayStrength,
       uWindDistanceStart,
       uWindDistanceEnd,
+      uCullStart,
+      uCullEnd,
+      uMidSoft,
+      uRimPos,
+      uRimSoft,
     },
   };
 }

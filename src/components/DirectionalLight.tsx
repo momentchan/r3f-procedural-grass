@@ -16,7 +16,7 @@ export function DirectionalLight({ onPositionChange }: DirectionalLightProps = {
         rotationSpeed: { value: 0.5, min: 0, max: 2, step: 0.1 },
         color: { value: '#ffffff' },
         intensity: { value: 2.0, min: 0, max: 3, step: 0.1 },
-        debug: { value: false },
+        debug: { value: true },
     }, { collapsed: true })
 
     const basePosition = useMemo(() => new THREE.Vector3(0, 5, 5), [])

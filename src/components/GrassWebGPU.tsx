@@ -65,6 +65,7 @@ export default function GrassWebGPU({ terrainParams, patchSize: initialPatchSize
   const grassComputeRef = useRef<any>(null)
   const computeUniformsRef = useRef<Record<string, any>>({})
   const materialUniformsRef = useRef<Record<string, any> | null>(null)
+  const materialRef = useRef<THREE.MeshStandardNodeMaterial | null>(null)
 
   const [grassParams, setGrassParams] = useControls('Grass', () => ({
     Size: folder({
@@ -144,6 +145,12 @@ export default function GrassWebGPU({ terrainParams, patchSize: initialPatchSize
         cullEnd: { value: 30, min: 0, max: 300, step: 1 },
         compensation: { value: 1.5, min: 1.0, max: 3.0, step: 0.1 },
       }, { collapsed: true }),
+    }, { collapsed: true }),
+    Material: folder({
+      roughness: { value: 0.3, min: 0.0, max: 1.0, step: 0.01 },
+      metalness: { value: 0.5, min: 0.0, max: 1.0, step: 0.01 },
+      emissive: { value: '#000000' },
+      envMapIntensity: { value: 0.5, min: 0.0, max: 3.0, step: 0.1 },
     }, { collapsed: true }),
   }), { collapsed: true })
 
@@ -238,11 +245,26 @@ export default function GrassWebGPU({ terrainParams, patchSize: initialPatchSize
       swayStrength: materialParams.swayStrength,
       windDistanceStart: materialParams.windDistanceStart,
       windDistanceEnd: materialParams.windDistanceEnd,
+      cullStart: materialParams.cullStart,
+      cullEnd: materialParams.cullEnd,
+      roughness: materialParams.roughness,
+      metalness: materialParams.metalness,
+      emissive: materialParams.emissive,
+      envMapIntensity: materialParams.envMapIntensity,
+      midSoft: materialParams.midSoft,
+      rimPos: materialParams.rimPos,
+      rimSoft: materialParams.rimSoft,
     })
     materialUniformsRef.current = materialUniforms
+    materialRef.current = material
 
     const mesh = new THREE.InstancedMesh(bladeGeometry, material, grassBlades);
     scene.add(mesh)
+
+    // Set envMap from scene if available
+    if (scene.environment) {
+      material.envMap = scene.environment
+    }
 
     return () => {
       scene.remove(mesh)
@@ -250,7 +272,7 @@ export default function GrassWebGPU({ terrainParams, patchSize: initialPatchSize
       material.dispose();
     }
 
-  }, [gridSize, patchSize])
+  }, [gridSize, patchSize, scene])
 
   // Update compute uniforms when grassParams change (like birds example)
   useEffect(() => {
@@ -295,6 +317,25 @@ export default function GrassWebGPU({ terrainParams, patchSize: initialPatchSize
       materialUniformsRef.current.uWindSwayStrength.value = params.swayStrength
       materialUniformsRef.current.uWindDistanceStart.value = params.windDistanceStart
       materialUniformsRef.current.uWindDistanceEnd.value = params.windDistanceEnd
+      materialUniformsRef.current.uCullStart.value = params.cullStart
+      materialUniformsRef.current.uCullEnd.value = params.cullEnd
+    }
+
+    // Update material properties
+    if (materialRef.current) {
+      materialRef.current.roughness = params.roughness
+      materialRef.current.metalness = params.metalness
+      if (params.emissive) {
+        materialRef.current.emissive = new THREE.Color(params.emissive)
+      }
+      materialRef.current.envMapIntensity = params.envMapIntensity
+    }
+
+    // Update material width shaping uniforms
+    if (materialUniformsRef.current) {
+      materialUniformsRef.current.uMidSoft.value = params.midSoft
+      materialUniformsRef.current.uRimPos.value = params.rimPos
+      materialUniformsRef.current.uRimSoft.value = params.rimSoft
     }
   }, [grassParams])
 
