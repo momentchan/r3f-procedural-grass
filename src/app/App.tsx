@@ -51,7 +51,7 @@ export default function App() {
             {/* <AdaptiveDpr pixelated /> */}
 
             <CameraControls makeDefault maxDistance={20} minDistance={5} maxPolarAngle={Math.PI / 2.2} minPolarAngle={Math.PI / 4} dollySpeed={0.5} />
-            {/* <Environment preset="city" environmentIntensity={0.2} /> */}
+            <Environment preset="city" environmentIntensity={2} />
             {/* <DirectionalLight onPositionChange={setLightPosition} /> */}
             {/* <Background sunPosition={lightPosition} /> */}
             {/* <Terrain onParamsChange={setTerrainParams} patchSize={patchSize} /> */}

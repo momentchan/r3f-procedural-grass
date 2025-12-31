@@ -1,4 +1,4 @@
-import { Fn, vec2, fract, sin, mul, dot, mix, instancedArray, instanceIndex, uniform, sqrt, length, atan, cos, If, Loop, float, clamp, floor, uint, oneMinus, select, mx_fractal_noise_float } from 'three/tsl';
+import { Fn, vec2, fract, sin, mul, dot, mix, instancedArray, instanceIndex, uniform, sqrt, length, atan, cos, If, Loop, float, clamp, floor, uint, oneMinus, select, mx_fractal_noise_float, remapClamp } from 'three/tsl';
 import * as THREE from 'three';
 
 /**
@@ -200,14 +200,13 @@ export function createGrassCompute(
       return normalizeAngle(facingAngle).add(PI).div(TWO_PI);
     };
 
-    // Sample wind strength from noise field using mx_fractal_noise_float (matching fbm2 from GLSL)
     const calculateWindStrength = (worldXZ: any) => {
       const windDirNorm = safeNormalize(uWindDir);
       const windUv = worldXZ.mul(uWindScale).add(windDirNorm.mul(uWindTime).mul(uWindSpeed));
       
-      // Use mx_fractal_noise_float for wind strength (matching fbm2 from GLSL)
       const windStrength01 = mx_fractal_noise_float(windUv);
-      return clamp(windStrength01.mul(uWindStrength), float(0.0), float(1.0));
+      // Remap noise value from [-1, 1] to [0, uWindStrength] and clamp to [0, 1]
+      return remapClamp(windStrength01, float(-1.0), float(1.0), float(0.0), uWindStrength);
     };
 
     // Main compute logic

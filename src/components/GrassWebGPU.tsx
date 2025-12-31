@@ -9,6 +9,7 @@ import { DEFAULT_GRID_SIZE, DEFAULT_PATCH_SIZE, BLADE_SEGMENTS, getGrassBladesCo
 import { createGrassGeometry, seededRandom } from './grass/utils'
 import { useGrassCompute } from './grass/hooks/useGrassCompute'
 import { createGrassCompute } from './grass/compute/grassCompute'
+import { createGrassMaterial } from './grass/materials/grassMaterial'
 import grassVertexShader from './grass/shaders/grassVertex.glsl?raw'
 import grassFragmentShader from './grass/shaders/grassFragment.glsl?raw'
 import { terrainMath } from './terrain/TerrainMath'
@@ -63,6 +64,7 @@ export default function GrassWebGPU({ terrainParams, patchSize: initialPatchSize
 
   const grassComputeRef = useRef<any>(null)
   const computeUniformsRef = useRef<Record<string, any>>({})
+  const materialUniformsRef = useRef<Record<string, any> | null>(null)
 
   const [grassParams, setGrassParams] = useControls('Grass', () => ({
     Size: folder({
@@ -121,9 +123,9 @@ export default function GrassWebGPU({ terrainParams, patchSize: initialPatchSize
       Wind: folder({
         windDirX: { value: 1, min: -1, max: 1, step: 0.01 },
         windDirZ: { value: 0, min: -1, max: 1, step: 0.01 },
-        windSpeed: { value: 0.6, min: 0, max: 3, step: 0.01 },
+        windSpeed: { value: 0.2, min: 0, max: 3, step: 0.01 },
         windStrength: { value: 0.35, min: 0, max: 2, step: 0.01 },
-        windScale: { value: 0.25, min: 0.01, max: 2, step: 0.01 },
+        windScale: { value: 0.1, min: 0.01, max: 2, step: 0.01 },
         windFacing: { value: 0.6, min: 0.0, max: 1.0, step: 0.01 },
         swayFreqMin: { value: 0.4, min: 0.1, max: 10.0, step: 0.1 },
         swayFreqMax: { value: 1.5, min: 0.1, max: 10.0, step: 0.1 },
@@ -184,9 +186,6 @@ export default function GrassWebGPU({ terrainParams, patchSize: initialPatchSize
       }
     }
 
-    const material = new THREE.MeshBasicNodeMaterial();
-    material.side = THREE.DoubleSide;
-
     const positions = instancedArray(positionArray, 'vec3')
 
     // Calculate grass struct size: 4 floats + 1 vec2 (2 floats) + 2 floats + 4 floats = 12 floats = 48 bytes
@@ -227,28 +226,22 @@ export default function GrassWebGPU({ terrainParams, patchSize: initialPatchSize
     computeUniformsRef.current = uniforms
     grassComputeRef.current = grassCompute
 
-    const grassVertex = Fn(() => {
-      const data = grassData.element(instanceIndex);
-
-      const instancePos = positions.element(instanceIndex);
-
-      const width = data.get('bladeWidth').toConst('bladeWidth');
-      const height = data.get('bladeHeight').toConst('bladeHeight');
-
-      // Scale positionLocal by width (x) and height (y)
-      const scaledPosition = vec3(
-        mul(positionLocal.x, width),
-        mul(positionLocal.y, height),
-        positionLocal.z
-      )
-      const position = scaledPosition.add(instancePos);
-      return cameraProjectionMatrix.mul(cameraViewMatrix).mul(position)
+    // Create grass material
+    const materialParams = params as any
+    const { material, uniforms: materialUniforms } = createGrassMaterial(grassData, positions, {
+      baseWidth: materialParams.baseWidth,
+      tipThin: materialParams.tipThin,
+      windTime: 0.0, // Will be updated in useFrame
+      windDir: { x: materialParams.windDirX, y: materialParams.windDirZ },
+      swayFreqMin: materialParams.swayFreqMin,
+      swayFreqMax: materialParams.swayFreqMax,
+      swayStrength: materialParams.swayStrength,
+      windDistanceStart: materialParams.windDistanceStart,
+      windDistanceEnd: materialParams.windDistanceEnd,
     })
-    material.vertexNode = grassVertex()
+    materialUniformsRef.current = materialUniforms
 
     const mesh = new THREE.InstancedMesh(bladeGeometry, material, grassBlades);
-
-
     scene.add(mesh)
 
     return () => {
@@ -278,7 +271,7 @@ export default function GrassWebGPU({ terrainParams, patchSize: initialPatchSize
       params.bladeRandomness.y,
       params.bladeRandomness.z
     )
-    
+
     // Update clump parameter uniforms
     uniforms.uClumpSize.value = params.clumpSize
     uniforms.uClumpRadius.value = params.clumpRadius
@@ -286,13 +279,23 @@ export default function GrassWebGPU({ terrainParams, patchSize: initialPatchSize
     uniforms.uBladeYaw.value = params.bladeYaw
     uniforms.uClumpYaw.value = params.clumpYaw
     uniforms.uTypeTrendScale.value = params.typeTrendScale
-    
-    // Update wind parameter uniforms
-    if (uniforms.uWindScale) uniforms.uWindScale.value = params.windScale ?? 0.25
-    if (uniforms.uWindSpeed) uniforms.uWindSpeed.value = params.windSpeed
-    if (uniforms.uWindStrength) uniforms.uWindStrength.value = params.windStrength
-    if (uniforms.uWindDir) uniforms.uWindDir.value.set(params.windDirX, params.windDirZ)
-    if (uniforms.uWindFacing) uniforms.uWindFacing.value = params.windFacing
+
+    // Update wind parameter uniforms (compute shader only has these)
+    uniforms.uWindScale.value = params.windScale ?? 0.25
+    uniforms.uWindSpeed.value = params.windSpeed
+    uniforms.uWindStrength.value = params.windStrength
+    uniforms.uWindDir.value.set(params.windDirX, params.windDirZ)
+    uniforms.uWindFacing.value = params.windFacing
+
+    // Update material wind parameter uniforms (vertex shader has these additional ones)
+    if (materialUniformsRef.current) {
+      materialUniformsRef.current.uWindDir.value.set(params.windDirX, params.windDirZ)
+      materialUniformsRef.current.uWindSwayFreqMin.value = params.swayFreqMin
+      materialUniformsRef.current.uWindSwayFreqMax.value = params.swayFreqMax
+      materialUniformsRef.current.uWindSwayStrength.value = params.swayStrength
+      materialUniformsRef.current.uWindDistanceStart.value = params.windDistanceStart
+      materialUniformsRef.current.uWindDistanceEnd.value = params.windDistanceEnd
+    }
   }, [grassParams])
 
 
@@ -300,9 +303,14 @@ export default function GrassWebGPU({ terrainParams, patchSize: initialPatchSize
     const renderer = gl as unknown as WebGPURenderer
     if (!grassComputeRef.current || !computeUniformsRef.current) return
 
+    const elapsedTime = clock.getElapsedTime()
+    
     // Update windTime based on elapsed time
-    if (computeUniformsRef.current.uWindTime) {
-      computeUniformsRef.current.uWindTime.value = clock.getElapsedTime()
+    computeUniformsRef.current.uWindTime.value = elapsedTime
+    
+    // Update material wind time uniform
+    if (materialUniformsRef.current) {
+      materialUniformsRef.current.uWindTime.value = elapsedTime
     }
 
     renderer.compute(grassComputeRef.current)
