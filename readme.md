@@ -6,6 +6,13 @@ This implementation is inspired by the procedural grass system featured in **Gho
 
 https://github.com/user-attachments/assets/283c42c2-a126-4e54-8be9-57bf9ab736a8
 
+
+## 💡 Attribution
+If you use this project in your own work, please provide credit to the author. 
+
+**Author:** Ming-Jyun Hung  
+**Source:** [https://mingjyunhung.com/](https://mingjyunhung.com/)
+
 ## Features
 
 - 🌱 **Procedural Grass Rendering**: GPU-computed grass blades with realistic wind animation and physics simulation
